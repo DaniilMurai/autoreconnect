@@ -17,7 +17,6 @@ pub fn run_core(
     commands: Receiver<UiCommand>,
     publish: Box<dyn Fn(UiModel) + Send>,
 ) {
-    let _ = location; // consumed by T-09
     let link = platform.wifi.link().unwrap_or(LinkState::Disassociated);
     let mut targets = platform.wifi.probe_targets();
     targets.http_addr = platform.prober.resolve_http();
@@ -35,6 +34,9 @@ pub fn run_core(
     };
     let os = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
     core.log(Health::Unknown, EventKind::AppStarted { version: env!("CARGO_PKG_VERSION").into(), os });
+    if location == PermissionState::Denied {
+        core.log(Health::Unknown, EventKind::PermissionMissing { which: "location".into() });
+    }
 
     let first = Observation { at: Instant::now(), link: core.link.clone(), probe: None };
     let mut step = core.policy.on_observation(&first);

@@ -2,12 +2,16 @@ use std::ffi::CString;
 use std::net::IpAddr;
 use std::num::NonZeroU32;
 use std::process::Command;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::Sender;
 use objc2::rc::Retained;
+use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
 use objc2_core_wlan::{CWInterface, CWInterfaceMode, CWWiFiClient};
+use objc2_foundation::{NSDate, NSRunLoop};
 
-use super::{Secret, WifiControl, JoinMode};
+use super::{JoinMode, PermissionState, Permissions, Secret, WifiControl};
 use crate::core::model::{LinkEvent, LinkState, NetworkId, ProbeTargets, Signal, WifiError};
 
 pub struct MacWifi {
@@ -78,6 +82,43 @@ impl WifiControl for MacWifi {
                 .find_map(|l| l.trim().strip_prefix("gateway:").and_then(|g| g.trim().parse::<IpAddr>().ok()))
         });
         ProbeTargets { interface, resolvers, gateway, http_addr: None }
+    }
+}
+
+pub struct MacPermissions {
+    manager: Retained<CLLocationManager>,
+}
+
+impl MacPermissions {
+    /// Main thread only: CoreLocation reports the answer on the run loop of the creating thread.
+    pub fn new() -> Self {
+        Self { manager: unsafe { CLLocationManager::new() } }
+    }
+
+    /// Pumps the main run loop until the user answers the prompt or `limit` passes.
+    pub fn wait_for_location(&self, limit: Duration) -> PermissionState {
+        let deadline = Instant::now() + limit;
+        let run_loop = NSRunLoop::currentRunLoop();
+        while self.location() == PermissionState::NotDetermined && Instant::now() < deadline {
+            run_loop.runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.2));
+            // runUntilDate returns at once while the run loop has no sources yet.
+            thread::sleep(Duration::from_millis(100));
+        }
+        self.location()
+    }
+}
+
+impl Permissions for MacPermissions {
+    fn location(&self) -> PermissionState {
+        match unsafe { self.manager.authorizationStatus() } {
+            CLAuthorizationStatus::NotDetermined => PermissionState::NotDetermined,
+            CLAuthorizationStatus::AuthorizedAlways | CLAuthorizationStatus::AuthorizedWhenInUse => PermissionState::Granted,
+            _ => PermissionState::Denied,
+        }
+    }
+
+    fn request_location(&self) {
+        unsafe { self.manager.requestWhenInUseAuthorization() }
     }
 }
 
