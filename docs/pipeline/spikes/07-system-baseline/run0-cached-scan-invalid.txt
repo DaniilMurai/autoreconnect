@@ -1,0 +1,12 @@
+[  0.02] requesting location authorization
+[  0.09] auth changed: 0
+[ 28.15] auth changed: 3
+[ 28.27] baseline: target network captured, 5 cycles; switch the AP off for ~60 s, then on
+[939.31] cycle 1: DOWN (mode=0)
+[949.22] cycle 1: VISIBLE in cached scan
+[949.22] cycle 1: ASSOCIATED +0.0s
+[949.35] cycle 1: ONLINE  time_back_online=0.1s (down for 10s)
+[986.62] cycle 2: DOWN (mode=0)
+[1203.30] cycle 2: VISIBLE in cached scan
+[1203.30] cycle 2: ASSOCIATED +0.0s
+[1203.46] cycle 2: ONLINE  time_back_online=0.2s (down for 217s)

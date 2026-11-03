@@ -1,0 +1,9 @@
+[  0.02] requesting location authorization
+[  0.13] auth changed: 0
+[ 47.75] auth changed: 3
+[ 47.75] phase=a auth=3 mode=1
+[ 47.76] ssid readable, len=17; index in preferred list=0 of 10
+[ 51.62] scan: 1 BSS for current ssid, took 3.9s
+[ 51.62] best rssi=-38 wpa2psk=true wpa3=false
+[ 51.62] keychain user: rc=4097 found=false took=0.0s
+[ 94.52] timeout waiting for authorization

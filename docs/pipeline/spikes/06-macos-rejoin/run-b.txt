@@ -1,0 +1,4 @@
+[  0.02] requesting location authorization
+[  0.10] auth changed: 3
+[  0.11] phase=b auth=3 mode=0
+[  0.11] ssid=nil -> abort

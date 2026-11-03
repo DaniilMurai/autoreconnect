@@ -1,0 +1,17 @@
+[package]
+name = "tray_spike"
+version = "0.0.1"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+tray-icon = "0.26.1"
+tao = "0.37.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

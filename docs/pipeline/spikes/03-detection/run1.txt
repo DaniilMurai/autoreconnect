@@ -1,0 +1,15 @@
+== direct UDP DNS to 1.1.1.1, random names (rcode 0=ok,3=NXDOMAIN)
+example.com p50 42.4 ms p95 71.1 ms sent 42 recv 104 rcodes [0]
+google.com p50 38.4 ms p95 57.9 ms sent 41 recv 91 rcodes [3]
+nonexistent-tld-zz p50 436.7 ms p95 516.5 ms sent 49 recv 124 rcodes [3]
+== getaddrinfo cache test (random name under example.com => NXDOMAIN, and a real name)
+9nia0pov9emt.example.com ['60.73 ms', '1.44 ms', '0.99 ms']
+example.com ['66.57 ms', '1.71 ms', '1.30 ms']
+www.apple.com ['1.39 ms', '1.06 ms', '1.22 ms']
+== blackhole resolver 192.0.2.1
+timeout 1.0 -> 1.001 s recv 0
+timeout 2.0 -> 2.001 s recv 0
+== HTTP probes, 20 samples, fresh connection each (urllib)
+http://captive.apple.com/hotspot-detect.html 200 body 69 p50 71 ms p95 122 ms
+http://connectivitycheck.gstatic.com/generate_204 204 body 0 p50 71 ms p95 181 ms
+http://www.msftconnecttest.com/connecttest.txt 200 body 22 p50 71 ms p95 103 ms

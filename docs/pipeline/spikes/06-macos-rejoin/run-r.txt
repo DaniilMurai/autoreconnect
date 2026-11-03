@@ -1,0 +1,7 @@
+[  0.01] requesting location authorization
+[  0.10] auth changed: 0
+[  9.89] auth changed: 3
+[ 11.92] phase=r mode=0 online(en0)=false profiles=10
+[ 15.78] scan for preferred #0: 5 BSS, took 3.9s
+[ 16.27] associate(nil) error after 0.5s: Error Domain=com.apple.wifi.apple80211API.error Code=-3900 "tmpErr" UserInfo={NSLocalizedFailureReason=tmpErr}
+[ 36.58] still not associated/online on en0: mode=0

@@ -1,0 +1,16 @@
+[  0.02] requesting location authorization
+[  0.09] auth changed: 0
+[  1.87] auth changed: 3
+[  2.03] baseline: target network captured, 5 cycles; switch the AP off for ~60 s, then on
+[ 48.78] cycle 1: DOWN (Wi-Fi disassociated)
+[ 67.59] cycle 1: VISIBLE (scan took 18.8s)
+[166.68] cycle 1: ASSOCIATED +99.1s after visible
+[167.18] cycle 1: ONLINE  time_back_online=99.6s (down for 118s)
+[210.68] cycle 2: DOWN (Wi-Fi disassociated)
+[218.94] cycle 2: VISIBLE (scan took 8.3s)
+[323.81] cycle 2: ASSOCIATED +104.9s after visible
+[324.23] cycle 2: ONLINE  time_back_online=105.3s (down for 114s)
+[363.59] cycle 3: DOWN (Wi-Fi disassociated)
+[371.78] cycle 3: VISIBLE (scan took 8.2s)
+[471.48] cycle 3: ASSOCIATED +99.7s after visible
+[472.11] cycle 3: ONLINE  time_back_online=100.3s (down for 109s)

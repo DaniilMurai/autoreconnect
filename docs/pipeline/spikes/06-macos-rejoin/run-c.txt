@@ -1,0 +1,10 @@
+[  0.01] requesting location authorization
+[  0.08] auth changed: 0
+[ 14.00] auth changed: 3
+[ 14.00] phase=c auth=3 mode=1
+[ 14.02] ssid readable, len=15; index in preferred list=0 of 10
+[ 16.44] scan: 5 BSS for current ssid, took 2.4s
+[ 16.44] best rssi=-73 wpa2psk=true wpa3=true
+[ 16.44] keychain user: rc=4097 found=false took=0.0s
+[ 16.68] disassociated, mode=0
+[ 16.85] CONTROL: macOS auto-joined, ONLINE 0.2s after drop, no associate call

@@ -1,0 +1,31 @@
+[ -0.0] == A. read-only
+[ -0.0] user=daniilmurai uid=501
+[  0.0] getairportnetwork: You are not associated with an AirPort network.
+[  0.1] getairportpower: Wi-Fi Power (en0): On
+[  0.1] ipconfig SSID line: <redacted>
+[  0.1] corewlan: name=en0 power=true ssid=nil bssid=nil rssi=-76 mode=1
+[  0.1] preferred networks count: 10, first is non-empty
+[  0.1] == B. power-cycle as user
+[  0.4] off rc=0 state=Wi-Fi Power (en0): Off
+[  5.5] on rc=0 state=Wi-Fi Power (en0): On
+[ 10.0] online
+[ 10.0] == C. CoreWLAN disassociate as user
+disassociate called
+[ 10.2] after: name=en0 power=true ssid=nil bssid=nil rssi=0 mode=0
+[ 11.3] 1 s later: online? no getairportnetwork: You are not associated with an AirPort network.
+[ 42.1] NOT online after ~30 s
+[ 42.1] == D. rejoin via networksetup -setairportnetwork <first preferred> (no password, 30 s cap)
+Failed to join network <first preferred SSID>.
+Error: -3900  The operation couldn’t be completed. tmpErrFailed to join network <first preferred SSID>.
+Error: -3900  The operation couldn’t be completed. tmpErrFailed to join network <first preferred SSID>.
+Error: -3900  The operation couldn’t be completed. tmpErr[ 51.1] rc=0
+[ 81.9] NOT online after ~30 s
+[ 82.0] == E. fallback power-cycle
+[146.7] NOT online after ~60 s
+[146.7] == F. rejoin while associated (does it work without password/prompt?)
+Failed to join network <first preferred SSID>.
+Error: -3900  The operation couldn’t be completed. tmpErrFailed to join network <first preferred SSID>.
+Error: -3900  The operation couldn’t be completed. tmpErrFailed to join network <first preferred SSID>.
+Error: -3900  The operation couldn’t be completed. tmpErr[152.0] rc=0
+[213.6] NOT online after ~60 s
+[213.6] final: name=en0 power=true ssid=nil bssid=nil rssi=0 mode=0

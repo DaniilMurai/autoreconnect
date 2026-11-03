@@ -1,0 +1,11 @@
+[  0.01] requesting location authorization
+[  0.09] auth changed: 0
+[  2.04] auth changed: 3
+[  2.05] phase=b auth=3 mode=1
+[  2.07] ssid readable, len=17; index in preferred list=0 of 10
+[  5.88] scan: 1 BSS for current ssid, took 3.8s
+[  5.88] best rssi=-38 wpa2psk=true wpa3=false
+[  5.88] keychain user: rc=4097 found=false took=0.0s
+[  6.12] disassociated, mode=0
+[ 10.81] associate(nil) error: Error Domain=com.apple.wifi.apple80211API.error Code=-3900 "tmpErr" UserInfo={NSLocalizedFailureReason=tmpErr}
+[ 10.95] ONLINE 4.8s after drop (via nil password)

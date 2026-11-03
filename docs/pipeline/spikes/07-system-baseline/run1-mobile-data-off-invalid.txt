@@ -1,0 +1,8 @@
+[  0.02] requesting location authorization
+[  0.07] auth changed: 0
+[  2.72] auth changed: 3
+[  2.98] baseline: target network captured, 5 cycles; switch the AP off for ~60 s, then on
+[ 52.11] cycle 1: DOWN (mode=1)
+[ 52.11] cycle 1: ASSOCIATED before scan saw it
+[ 52.11] cycle 1: ASSOCIATED +0.0s after visible
+[ 67.36] cycle 1: ONLINE  time_back_online=15.3s (upper bound: associated before our scan saw the AP) (down for 15s)
