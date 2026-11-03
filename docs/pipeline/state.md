@@ -8,6 +8,7 @@
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
 - Children (2026-11-03): T-05, T-06, T-08, T-09, T-10 merged; none running.
+- Remote (2026-11-03): private https://github.com/DaniilMurai/autoreconnect, `main` = orchestrator branch through T-10. Cloud sessions run Linux: only platform-free work (policy, tools, Windows CI), never CoreWLAN/keychain/live runs.
 - Updated: 2026-11-03
 
 ## Gates
