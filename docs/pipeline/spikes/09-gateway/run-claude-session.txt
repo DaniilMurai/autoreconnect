@@ -1,0 +1,5 @@
+S-09 from-claude-session gw=10.250.108.1 iface=en0 16:53:49
+16:53:53 icmp=TimeoutError tcp53=TimeoutError tcp80=TimeoutError tcp443=TimeoutError dns=rcode3 arp=none
+16:53:58 icmp=TimeoutError tcp53=TimeoutError tcp80=TimeoutError tcp443=TimeoutError dns=rcode3 arp=none
+16:54:03 icmp=TimeoutError tcp53=TimeoutError tcp80=TimeoutError tcp443=TimeoutError dns=rcode3 arp=none
+summary from-claude-session {'icmp': {'TimeoutError': 3}, 'tcp53': {'TimeoutError': 3}, 'tcp80': {'TimeoutError': 3}, 'tcp443': {'TimeoutError': 3}, 'dns': {'rcode3': 3}}

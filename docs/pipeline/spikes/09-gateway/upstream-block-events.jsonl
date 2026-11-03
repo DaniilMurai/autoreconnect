@@ -1,0 +1,3 @@
+{"ts":"2026-11-03T17:22:35.246704+01:00","health":"unknown","signal":{"rssi_dbm":-79,"noise_dbm":-96,"tx_rate_mbps":103.0},"network":null,"event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}}
+{"ts":"2026-11-03T17:23:04.162099+01:00","health":"upstream_down","signal":{"rssi_dbm":-78,"noise_dbm":-96,"tx_rate_mbps":103.0},"network":null,"event":"connectivity_lost","detail":{"to":"upstream_down"}}
+{"ts":"2026-11-03T17:23:35.5133+01:00","health":"healthy","signal":{"rssi_dbm":-76,"noise_dbm":-96,"tx_rate_mbps":103.0},"network":null,"event":"connectivity_restored","detail":{"downtime_ms":31350}}

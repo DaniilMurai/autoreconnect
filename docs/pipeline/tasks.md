@@ -45,7 +45,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Found: T-01 dry run 2026-11-03 — routes to 192.168.8.1 go via en9, so the gateway probe could answer
              over en9 while Wi-Fi is broken (false UpstreamDown); same class as S-06's second-uplink runs.
 
-- [ ] T-25 — Gateway check where the router ignores ping
+- [x] T-25 — Gateway check where the router ignores ping
       Files: docs/pipeline/spikes/09-gateway/ (throwaway), then src/core/probe.rs, docs/pipeline/contracts.md
       Do: spike first: on a network whose router drops ICMP (10.250.108.1 on 2026-11-03), find a check that
           proves "the router is reachable over Wi-Fi" without root — e.g. ARP reachability of the gateway MAC,

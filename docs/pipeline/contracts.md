@@ -1,6 +1,6 @@
 # Contracts
 
-_Created 2026-11-03 from [plan.md](plan.md) and [spikes/FINDINGS.md](spikes/FINDINGS.md); revised the
+_Revised 2026-11-03 after S-09 (gateway probe). Created 2026-11-03 from [plan.md](plan.md) and [spikes/FINDINGS.md](spikes/FINDINGS.md); revised the
 same day after the slice finding "upstream down vs Wi-Fi broken" (FINDINGS, "Slice findings").
 Shapes only, no behaviour. The Rust blocks below, concatenated in order into one `lib.rs`,
 type-check together, and the JSON examples below parse into `Event` (checked 2026-11-03 with
@@ -104,7 +104,9 @@ pub enum ProbeKind {
     /// GET `cfg.http_probe_url`; exact status and body = ok (S-03).
     Http,
     /// Unprivileged ICMP echo (`SOCK_DGRAM`/`IPPROTO_ICMP`, no root on macOS, verified 2026-11-03)
-    /// to the Wi-Fi interface's default gateway; a reply = ok.
+    /// and a DNS `version.bind CH TXT` query, both sent at once to the Wi-Fi interface's default
+    /// gateway; any reply to either (any rcode) = ok. The CHAOS query covers routers that drop
+    /// ping and is never forwarded upstream (S-09).
     Gateway,
 }
 

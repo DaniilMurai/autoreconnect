@@ -197,3 +197,26 @@ Invalid runs kept aside: `run0-cached-scan-invalid.txt` (the system scan cache i
   - `suspect_probe_interval` is measured from probe start. A unit test caught an 11 s worst case; it is now 9 s.
 - The pf rule survives a Wi-Fi power-cycle (it is bound to the name en0).
 - A second app instance looks exactly like the user toggling Wi-Fi. The real app needs a single-instance guard (lock file).
+
+## S-09 — gateway check where the router ignores ping (2026-11-03, macOS 27.2, office Wi-Fi 10.250.108.0/22)
+
+**Question:** without root, which check proves "the router answers over Wi-Fi" on a network whose router drops ICMP? Yes/no per candidate.
+
+**Facts** (`spikes/09-gateway/probe.py`, `run-claude-session.txt`, plus `dig`; all sockets bound to en0):
+- ICMP echo to 10.250.108.1: **no** — times out (also from the user's Terminal: "Request timeout").
+- TCP connect to 53/80/443: **no** — silent timeouts, no RST.
+- DNS query for a random name to the router: answered (NXDOMAIN) here, but on the home router (192.168.8.1) the same query mostly timed out on 2026-11-03 (T-01 run). It is also forwarded upstream, so with the upstream down it can time out — **not** a router-only signal.
+- DNS `version.bind CH TXT` to the router: **yes** — `REFUSED` at once. A CHAOS query is answered by the router's resolver itself and never forwarded, so it does not depend on the upstream.
+- DNS opcode STATUS (no question): no reply.
+- ARP (`arp -la`): **no** as a probe — a script gets only the header line on macOS 27.2, the Expire column did not move over 20 min, and a pf block (the AC-2 tool) does not stop ARP, so it would report the router alive during AC-2.
+- Local Network privacy: **refuted** as the cause of the earlier EHOSTUNREACH. Right after the reboot every LAN address gave EHOSTUNREACH from this session; 15 minutes later the same calls time out normally and DNS to the router works. Transient after the network join; nothing for the `.app` to request.
+
+**Answer:** the gateway probe = ICMP echo **or** a `version.bind CH TXT` query to the gateway, sent together; **any** reply from the gateway (any rcode) = alive.
+To verify: the home router (192.168.8.1) answering the CHAOS query — check when back on it. If neither answers on some network, the probe stays as before (Wi-Fi treated as broken).
+
+**Consequence:** contracts.md `ProbeKind::Gateway` changes; the AC-2 budget keeps 1 s for the gateway because both are sent at once.
+
+**End-to-end check (T-25 DoD, 2026-11-03 17:22):** dry-run app, pf `block drop out quick on en0 from any to ! 10.250.108.0/22`
+for 40 s (internet cut, router reachable). Blocked 17:22:50 → `connectivity_lost {to: upstream_down}` 17:23:04 (14.2 s);
+Gateway probes `Ok` 36–58 ms throughout; zero `recovery_action`; unblocked 17:23:30 → `connectivity_restored` 17:23:35 (5.5 s).
+Logs: `09-gateway/upstream-block-events.jsonl`, `upstream-block-trace.txt`.

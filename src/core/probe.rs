@@ -31,7 +31,7 @@ impl Prober for NetProber {
                 None => ProbeOutcome::NotReady,
             },
             ProbeKind::Gateway => match targets.gateway {
-                Some(IpAddr::V4(gw)) => ping(gw, targets.interface, timeout),
+                Some(IpAddr::V4(gw)) => gateway(gw, targets.interface, timeout),
                 Some(IpAddr::V6(_)) | None => ProbeOutcome::NotReady,
             },
         };
@@ -53,7 +53,7 @@ impl NetProber {
         }
         // A fresh random name defeats the mDNSResponder cache; only NXDOMAIN proves a live resolver (S-03).
         let label: String = label.iter().map(|b| format!("{b:02x}")).collect();
-        let query = dns_query(id, &format!("{label}.{}", self.dns_zone));
+        let query = dns_query(id, &format!("{label}.{}", self.dns_zone), QTYPE_A, QCLASS_IN);
 
         let sock: UdpSocket = match bound_socket(&resolver, Type::DGRAM, Protocol::UDP, iface) {
             Ok(s) => s.into(),
@@ -113,33 +113,56 @@ impl NetProber {
     }
 }
 
+/// ICMP echo and a CHAOS `version.bind` query, sent together; any reply from the gateway = ok.
+/// Some routers drop ping (S-09); the CHAOS query is answered by the router itself, never forwarded.
+fn gateway(gw: Ipv4Addr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
+    let deadline = Instant::now() + timeout;
+    let echo = send_echo(gw, iface);
+    let chaos = send_chaos(gw, iface);
+    if let (Err(e), Err(_)) = (&echo, &chaos) {
+        return io_outcome(e);
+    }
+    let mut buf = [0u8; 1500];
+    while Instant::now() < deadline {
+        if echo.as_ref().is_ok_and(|(s, seq)| echo_reply(s, gw, *seq, &mut buf)) {
+            return ProbeOutcome::Ok;
+        }
+        if chaos.as_ref().is_ok_and(|(s, id)| matches!(s.recv(&mut buf), Ok(n) if n >= 12 && buf[0..2] == *id)) {
+            return ProbeOutcome::Ok;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    ProbeOutcome::Timeout
+}
+
 /// ICMP echo over a datagram socket, which macOS allows without root (verified 2026-11-03).
-fn ping(gateway: Ipv4Addr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
-    let sock: UdpSocket = match bound_socket(&IpAddr::V4(gateway), Type::DGRAM, Protocol::ICMPV4, iface) {
-        Ok(s) => s.into(),
-        Err(e) => return io_outcome(&e),
-    };
+fn send_echo(gw: Ipv4Addr, iface: Option<NonZeroU32>) -> std::io::Result<(UdpSocket, [u8; 2])> {
+    let sock: UdpSocket = bound_socket(&IpAddr::V4(gw), Type::DGRAM, Protocol::ICMPV4, iface)?.into();
     let mut seq = [0u8; 2];
     let _ = getrandom::fill(&mut seq);
     let mut packet = vec![8, 0, 0, 0, 0x41, 0x52, seq[0], seq[1]];
     packet.extend_from_slice(b"autoreconnect");
     let sum = checksum(&packet);
     packet[2..4].copy_from_slice(&sum.to_be_bytes());
-    if let Err(e) = sock.set_read_timeout(Some(timeout)).and(sock.send_to(&packet, (gateway, 0)).map(|_| ())) {
-        return io_outcome(&e);
-    }
-    let mut buf = [0u8; 1500];
-    loop {
-        let (n, from) = match sock.recv_from(&mut buf) {
-            Ok(r) => r,
-            Err(e) => return io_outcome(&e),
-        };
-        // macOS hands datagram ICMP replies over with the IP header in front.
-        let off = if n > 0 && buf[0] >> 4 == 4 { usize::from(buf[0] & 0x0f) * 4 } else { 0 };
-        if from.ip() == IpAddr::V4(gateway) && n >= off + 8 && buf[off] == 0 && buf[off + 6..off + 8] == seq {
-            return ProbeOutcome::Ok;
-        }
-    }
+    sock.set_nonblocking(true)?;
+    sock.send_to(&packet, (gw, 0))?;
+    Ok((sock, seq))
+}
+
+fn echo_reply(sock: &UdpSocket, gw: Ipv4Addr, seq: [u8; 2], buf: &mut [u8]) -> bool {
+    let Ok((n, from)) = sock.recv_from(buf) else { return false };
+    // macOS hands datagram ICMP replies over with the IP header in front.
+    let off = if n > 0 && buf[0] >> 4 == 4 { usize::from(buf[0] & 0x0f) * 4 } else { 0 };
+    from.ip() == IpAddr::V4(gw) && n >= off + 8 && buf[off] == 0 && buf[off + 6..off + 8] == seq
+}
+
+fn send_chaos(gw: Ipv4Addr, iface: Option<NonZeroU32>) -> std::io::Result<(UdpSocket, [u8; 2])> {
+    let sock: UdpSocket = bound_socket(&IpAddr::V4(gw), Type::DGRAM, Protocol::UDP, iface)?.into();
+    let mut id = [0u8; 2];
+    let _ = getrandom::fill(&mut id);
+    sock.set_nonblocking(true)?;
+    sock.send_to(&dns_query(id, "version.bind", QTYPE_TXT, QCLASS_CH), (gw, 53))?;
+    Ok((sock, id))
 }
 
 /// A socket bound to `iface` (`IP_BOUND_IF` on macOS), so it leaves through Wi-Fi whatever the routing table says.
@@ -160,7 +183,12 @@ fn checksum(data: &[u8]) -> u16 {
     !(sum as u16)
 }
 
-fn dns_query(id: [u8; 2], name: &str) -> Vec<u8> {
+const QTYPE_A: u16 = 1;
+const QTYPE_TXT: u16 = 16;
+const QCLASS_IN: u16 = 1;
+const QCLASS_CH: u16 = 3;
+
+fn dns_query(id: [u8; 2], name: &str, qtype: u16, qclass: u16) -> Vec<u8> {
     let mut q = Vec::with_capacity(64);
     q.extend_from_slice(&id);
     q.extend_from_slice(&[0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
@@ -168,7 +196,9 @@ fn dns_query(id: [u8; 2], name: &str) -> Vec<u8> {
         q.push(part.len() as u8);
         q.extend_from_slice(part.as_bytes());
     }
-    q.extend_from_slice(&[0, 0, 1, 0, 1]);
+    q.push(0);
+    q.extend_from_slice(&qtype.to_be_bytes());
+    q.extend_from_slice(&qclass.to_be_bytes());
     q
 }
 
@@ -194,7 +224,8 @@ mod tests {
     }
 
     /// Needs Wi-Fi on en0 with internet: `cargo test --release -- --ignored`.
-    /// Pinned to loopback, the same probe must not get out, so the binding really steers egress.
+    /// Pinned to loopback, the same probes must not get out, so the binding really steers egress.
+    /// The gateway part passes on a router that drops ping only through the CHAOS query (S-09).
     #[test]
     #[ignore]
     fn probes_leave_only_through_the_bound_interface() {
@@ -211,11 +242,17 @@ mod tests {
             gateway: None,
             http_addr: prober.resolve_http(),
         };
+        let route = std::process::Command::new("/sbin/route").args(["-n", "get", "-ifscope", "en0", "default"]).output().unwrap();
+        t.gateway = String::from_utf8_lossy(&route.stdout)
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("gateway:").and_then(|g| g.trim().parse().ok()));
         let timeout = Duration::from_secs(2);
-        assert_eq!(prober.probe(ProbeKind::Dns, &t, timeout).outcome, ProbeOutcome::Ok);
-        assert_eq!(prober.probe(ProbeKind::Http, &t, timeout).outcome, ProbeOutcome::Ok);
+        for kind in [ProbeKind::Dns, ProbeKind::Http, ProbeKind::Gateway] {
+            assert_eq!(prober.probe(kind, &t, timeout).outcome, ProbeOutcome::Ok, "{kind:?} over en0");
+        }
         t.interface = index("lo0");
-        assert_ne!(prober.probe(ProbeKind::Dns, &t, timeout).outcome, ProbeOutcome::Ok);
-        assert_ne!(prober.probe(ProbeKind::Http, &t, timeout).outcome, ProbeOutcome::Ok);
+        for kind in [ProbeKind::Dns, ProbeKind::Http, ProbeKind::Gateway] {
+            assert_ne!(prober.probe(kind, &t, timeout).outcome, ProbeOutcome::Ok, "{kind:?} over lo0");
+        }
     }
 }

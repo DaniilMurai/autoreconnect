@@ -1,8 +1,8 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-24 done 2026-11-03)
-- Next: T-25 gateway check where the router ignores ping (spike first), then T-03
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-24, T-25 done 2026-11-03)
+- Next: T-05 Degraded state
 - Updated: 2026-11-03
 
 ## Gates
@@ -12,11 +12,11 @@
 | 0 context load | done | environment scouted (macOS 26.6.2 arm64, Rust 1.99.1) |
 | 1 idea | done, confirmed 2026-11-02 (user moved to stage 2) | brief.md |
 | 2 plan | revised after S-01…S-07, go given 2026-11-03 | plan.md |
-| 3 spikes | S-01…S-07 done (S-07 2026-11-03: macOS fast after a clean AP outage); S-08 pending (Android, desk) | spikes/FINDINGS.md |
+| 3 spikes | S-01…S-07, S-09 done (S-07 2026-11-03: macOS fast after a clean AP outage); S-08 pending (Android, desk) | spikes/FINDINGS.md |
 | 4 contracts | done 2026-11-03; revised after the slice (gateway probe, UpstreamDown, NotReady, settle, dry run) | contracts.md |
 | 5 slice | done 2026-11-03: AC-2 live 6.2 s / 9.4 s / 6.7 s; How to run written | src/, Cargo.toml, brief.md |
 | 6 tasks | done 2026-11-03, go given: T-01…T-23 (core 7, macOS 8, tray/login 3, Windows 3, hand-off 2); Android none until S-08 | tasks.md |
-| 7 implementation | T-01, T-02, T-03, T-04, T-07, T-24 done 2026-11-03 (T-03/04/07 from the parallel session, merged here); T-24 and T-25 added from live runs | tasks.md |
+| 7 implementation | T-01, T-02, T-03, T-04, T-07, T-24, T-25 done 2026-11-03 (T-03/04/07 from the parallel session, merged here); T-24 and T-25 added from live runs | tasks.md |
 
 ## Draft decisions (collect into decisions.md at stage 9)
 
@@ -57,4 +57,5 @@
 - 2026-11-03 (T-24, with the user): DoD changed to the en0-vs-lo0 egress test; the two-uplink capture is re-checked when back on the 192.168.8.x router.
 - 2026-11-03 (T-24 ping in the user's Terminal): the 10.250.108.1 router times out on ping (send works) → ICMP is filtered there, the gateway probe cannot tell Wi-Fi from upstream → T-25. EHOSTUNREACH in this session vs a plain timeout in Terminal points at Local Network privacy for this process tree.
 - 2026-11-03 (merge): T-03, T-04, T-07 came from the "Pipeline stage 6 parallel tasks" session (uncommitted in its worktree) and were applied here; `JsonlSink::open(dir, max_bytes)`; `Policy::set_capabilities(reassociate_allowed)`, default false until `run` (T-13) sets it. T-07's slice-run-3 replay skipped: that log was lost in the reboot.
+- 2026-11-03 (S-09/T-25): gateway probe = ICMP echo + DNS `version.bind CH TXT` sent together, any reply = router alive; Local Network privacy theory refuted (EHOSTUNREACH was transient after the reboot). End-to-end: internet-only block → `upstream_down`, no action.
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).
