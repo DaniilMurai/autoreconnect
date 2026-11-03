@@ -7,7 +7,7 @@
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
-- Children (2026-11-03): T-05, T-06, T-08 merged; none running.
+- Children (2026-11-03): T-05, T-06, T-08 merged. T-09 running with the user in `local_790cd7b8-425f-4dbd-b30d-fd666d01b1a3` (t09-location).
 - Updated: 2026-11-03
 
 ## Gates
