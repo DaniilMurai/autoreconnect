@@ -112,11 +112,12 @@ run by the user in their own terminal (brief.md, "How to run")._
 
 ## macOS platform
 
-- [ ] T-08 — `.app` bundle build
+- [x] T-08 — `.app` bundle build
       Files: tools/bundle-macos.sh (new), packaging/macos/Info.plist (new)
       Do: `cargo build --release` → `target/AutoReconnect.app` with the Info.plist from contracts
           (`dev.autoreconnect.app`, `LSUIElement`, Location usage strings), ad-hoc `codesign -s -`.
-      DoD: `codesign -v target/AutoReconnect.app` passes; `AUTORECONNECT_DRY_RUN=1 open target/AutoReconnect.app`
+      DoD: `codesign -v target/AutoReconnect.app` passes; `open --env AUTORECONNECT_DRY_RUN=1 target/AutoReconnect.app`
+           (a bare `open` drops shell env and would start it live)
            → `pgrep -x autoreconnect` returns a PID owned by the user; `plutil -lint` passes on Info.plist.
       Executor: subagent
       Depends on: T-02

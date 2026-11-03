@@ -1,14 +1,15 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-24, T-25 done 2026-11-03)
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-08, T-24, T-25 done 2026-11-03)
 - Next: T-05 Degraded state
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
-- Running children (2026-11-03): T-05 `local_2dc3e38c-1bb0-48ad-a962-cda6559e836f` (t05-degraded),
-  T-08 `local_10c176ec-cab6-46f9-a718-891ee5f51af3` (t08-bundle). T-06 starts after T-05 is merged.
+- Children (2026-11-03): T-08 merged. T-05 `local_2dc3e38c-1bb0-48ad-a962-cda6559e836f` (t05-degraded) is
+  needs-user: the AC-14 detection DoD (≤ 30 s at 40 % loss) fails in ~21 % of seeded runs — case: contract;
+  waits for the user's choice (pass-rate DoD / change numbers / wait for the live pf run). T-06 after T-05.
 - Updated: 2026-11-03
 
 ## Gates
@@ -64,4 +65,5 @@
 - 2026-11-03 (T-24 ping in the user's Terminal): the 10.250.108.1 router times out on ping (send works) → ICMP is filtered there, the gateway probe cannot tell Wi-Fi from upstream → T-25. EHOSTUNREACH in this session vs a plain timeout in Terminal points at Local Network privacy for this process tree.
 - 2026-11-03 (merge): T-03, T-04, T-07 came from the "Pipeline stage 6 parallel tasks" session (uncommitted in its worktree) and were applied here; `JsonlSink::open(dir, max_bytes)`; `Policy::set_capabilities(reassociate_allowed)`, default false until `run` (T-13) sets it. T-07's slice-run-3 replay skipped: that log was lost in the reboot.
 - 2026-11-03 (S-09/T-25): gateway probe = ICMP echo + DNS `version.bind CH TXT` sent together, any reply = router alive; Local Network privacy theory refuted (EHOSTUNREACH was transient after the reboot). End-to-end: internet-only block → `upstream_down`, no action.
+- 2026-11-03 (T-08): launch the bundle with `open --env AUTORECONNECT_DRY_RUN=1`; a bare `open` drops shell env. Dry run is visible only in the process env (`ps eww`), not in events.jsonl.
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).
