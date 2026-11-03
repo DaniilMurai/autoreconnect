@@ -133,7 +133,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop (needs the user at the screen)
       Depends on: T-01, T-08
 
-- [ ] T-10 — Credential store (macOS)
+- [x] T-10 — Credential store (macOS)
       Files: src/platform/macos.rs (or macos/creds.rs), Cargo.toml (`security-framework`)
       Do: `CredentialStore`: own item in the login keychain (service `dev.autoreconnect.wifi`, account = SSID);
           `import_from_system` via `CWKeychainFindWiFiPassword(.system)` (S-06); run imports once per network,
