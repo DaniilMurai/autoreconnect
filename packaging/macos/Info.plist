@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>dev.autoreconnect.app</string>
+    <key>CFBundleName</key>
+    <string>AutoReconnect</string>
+    <key>CFBundleExecutable</key>
+    <string>autoreconnect</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSLocationUsageDescription</key>
+    <string>AutoReconnect reads the name of the Wi-Fi network you are on so it can rejoin it after a drop.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>AutoReconnect reads the name of the Wi-Fi network you are on so it can rejoin it after a drop.</string>
+</dict>
+</plist>
