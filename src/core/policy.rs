@@ -105,6 +105,9 @@ pub struct Policy {
     degraded_episode: bool,
     own_power_cycle_until: Option<Instant>,
     settle_until: Option<Instant>,
+    /// Rejoins tried since the link dropped and when the last one ended; they pace `rejoin_backoff`.
+    rejoins: usize,
+    last_rejoin_at: Option<Instant>,
 }
 
 impl Policy {
@@ -125,6 +128,8 @@ impl Policy {
             degraded_episode: false,
             own_power_cycle_until: None,
             settle_until: None,
+            rejoins: 0,
+            last_rejoin_at: None,
         }
     }
 
@@ -139,6 +144,10 @@ impl Policy {
 
     pub fn on_observation(&mut self, obs: &Observation) -> Step {
         let mut events = Vec::new();
+        // The core loop keeps watching the link for the tray, but nothing is counted or acted on (AC-7).
+        if self.health == Health::Paused {
+            return self.idle(events);
+        }
         match &obs.link {
             LinkState::PoweredOff => {
                 let ours = self.own_power_cycle_until.is_some_and(|t| obs.at < t);
@@ -148,11 +157,13 @@ impl Policy {
                 }
                 return self.idle(events);
             }
-            LinkState::Disassociated => {
-                // Slice: rejoin is not wired yet, so this state only waits.
-                return self.idle(events);
-            }
+            LinkState::Disassociated => return self.not_associated(obs.at, events),
             LinkState::Associated { .. } => {}
+        }
+        if self.health == Health::NotAssociated {
+            self.health = Health::Unknown;
+            self.rejoins = 0;
+            self.last_rejoin_at = None;
         }
         if self.health == Health::WifiOffByUser {
             events.push(EventKind::WifiOnByUser);
@@ -290,6 +301,35 @@ impl Policy {
         at >= last + gap
     }
 
+    /// Only Rejoin while the link is down: a missing AP (S-07, router off) is not fixed by a power-cycle.
+    fn not_associated(&mut self, at: Instant, mut events: Vec<EventKind>) -> Step {
+        // Power coming back after our own power-cycle passes through Disassociated while the OS joins.
+        if self.own_power_cycle_until.is_some_and(|t| at < t) {
+            return self.idle(events);
+        }
+        if self.health != Health::NotAssociated {
+            self.health = Health::NotAssociated;
+            self.lost_at.get_or_insert(at);
+            self.failures = 0;
+            self.rejoins = 0;
+            self.last_rejoin_at = None;
+            events.push(EventKind::ConnectivityLost { to: Health::NotAssociated });
+        }
+        if !self.reassociate_allowed {
+            return self.idle(events);
+        }
+        let Some(last) = self.last_rejoin_at else {
+            return self.step(events, NextAction::Act(RecoveryKind::Rejoin));
+        };
+        let backoff = &self.cfg.rejoin_backoff;
+        let due = last + backoff[self.rejoins.min(backoff.len() - 1)];
+        if at >= due {
+            return self.step(events, NextAction::Act(RecoveryKind::Rejoin));
+        }
+        let after = due.saturating_duration_since(at).min(self.cfg.link_poll_interval);
+        self.step(events, NextAction::Idle { after })
+    }
+
     fn upstream_down(&mut self, at: Instant, mut events: Vec<EventKind>) -> Step {
         if self.health != Health::UpstreamDown {
             self.health = Health::UpstreamDown;
@@ -314,7 +354,13 @@ impl Policy {
     }
 
     pub fn on_action_done(&mut self, kind: RecoveryKind, result: &Result<(), WifiError>, at: Instant) -> Step {
+        // NotInRange is the normal answer while the AP is away; every failure just waits for the next backoff step.
         let _ = result;
+        if kind == RecoveryKind::Rejoin {
+            self.rejoins += 1;
+            self.last_rejoin_at = Some(at);
+            return self.step(Vec::new(), NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval });
+        }
         self.last_action_at = Some(at);
         if kind == RecoveryKind::Reassociate {
             self.reassociated = true;
@@ -329,9 +375,21 @@ impl Policy {
 
     pub fn set_paused(&mut self, paused: bool, at: Instant) -> Step {
         let _ = at;
-        self.health = if paused { Health::Paused } else { Health::Unknown };
-        let event = if paused { EventKind::Paused } else { EventKind::Resumed };
-        self.step(vec![event], NextAction::Idle { after: self.cfg.link_poll_interval })
+        if paused == (self.health == Health::Paused) {
+            return self.idle(Vec::new());
+        }
+        // The outage before a pause is not the user's downtime after it; resume judges the link afresh.
+        self.lost_at = None;
+        self.failures = 0;
+        self.window.clear();
+        self.rejoins = 0;
+        self.last_rejoin_at = None;
+        if paused {
+            self.health = Health::Paused;
+            return self.idle(vec![EventKind::Paused]);
+        }
+        self.health = Health::Unknown;
+        self.step(vec![EventKind::Resumed], NextAction::Probe { kind: ProbeKind::Dns, after: Duration::ZERO })
     }
 
     fn idle(&self, events: Vec<EventKind>) -> Step {
@@ -622,5 +680,130 @@ mod tests {
         let last = last.unwrap();
         assert_eq!(last.health, Health::Healthy);
         assert!(matches!(last.events[..], [EventKind::ConnectivityRestored { .. }]));
+    }
+
+    fn link_only(at: Instant, link: LinkState) -> Observation {
+        Observation { at, link, probe: None }
+    }
+
+    #[test]
+    fn drop_logs_not_associated_and_rejoins_at_once() {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        let step = p.on_observation(&link_only(t0 + Duration::from_secs(1), LinkState::Disassociated));
+        assert_eq!(step.health, Health::NotAssociated);
+        assert_eq!(step.events, vec![EventKind::ConnectivityLost { to: Health::NotAssociated }]);
+        assert_eq!(step.next, NextAction::Act(RecoveryKind::Rejoin));
+    }
+
+    /// Drives 10 min of a vanished AP the way the core loop would; returns (start, end) of each action.
+    fn simulate_disassociated(reassociate_allowed: bool) -> Vec<(Instant, Instant, RecoveryKind)> {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(reassociate_allowed);
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        let mut t = t0 + Duration::from_secs(1);
+        let mut actions = Vec::new();
+        while t < t0 + Duration::from_secs(600) {
+            let step = p.on_observation(&link_only(t, LinkState::Disassociated));
+            let next = match step.next {
+                NextAction::Act(kind) => {
+                    // A rejoin with the AP gone ends in NotInRange after a scan.
+                    let done = t + Duration::from_secs(3);
+                    actions.push((t, done, kind));
+                    t = done;
+                    p.on_action_done(kind, &Err(WifiError::NotInRange), t).next
+                }
+                next => next,
+            };
+            match next {
+                NextAction::Probe { after, .. } | NextAction::Idle { after } => t += after,
+                NextAction::Act(_) => unreachable!(),
+            }
+        }
+        actions
+    }
+
+    #[test]
+    fn ten_minutes_disassociated_rejoins_on_backoff_and_never_power_cycles() {
+        let cfg = Config::default();
+        let actions = simulate_disassociated(true);
+        assert!(actions.iter().all(|(_, _, k)| *k == RecoveryKind::Rejoin), "{actions:?}");
+        let backoff = &cfg.rejoin_backoff;
+        for (i, w) in actions.windows(2).enumerate() {
+            let gap = w[1].0 - w[0].1;
+            let want = backoff[(i + 1).min(backoff.len() - 1)];
+            assert!(gap >= want && gap < want + cfg.link_poll_interval, "rejoin {}: gap {gap:?}, backoff {want:?}", i + 1);
+        }
+        // 0, 2, 4, 8, 16 s then every 30 s, each try taking 3 s: about 20 tries in 10 min.
+        assert!((15..=25).contains(&actions.len()), "{} rejoins", actions.len());
+    }
+
+    #[test]
+    fn disassociated_without_credential_waits_without_acting() {
+        assert!(simulate_disassociated(false).is_empty());
+    }
+
+    #[test]
+    fn rejoin_success_restores_with_downtime() {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        p.on_observation(&link_only(t0 + Duration::from_secs(1), LinkState::Disassociated));
+        let step = p.on_action_done(RecoveryKind::Rejoin, &Ok(()), t0 + Duration::from_secs(5));
+        assert!(matches!(step.next, NextAction::Probe { .. }));
+        let step = p.on_observation(&obs(t0 + Duration::from_secs(6), ProbeKind::Http, ProbeOutcome::Ok));
+        assert_eq!(step.health, Health::Healthy);
+        assert_eq!(step.events, vec![EventKind::ConnectivityRestored { downtime_ms: 5000 }]);
+    }
+
+    #[test]
+    fn disassociated_right_after_own_power_cycle_is_part_of_it() {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        p.on_action_done(RecoveryKind::PowerCycle, &Ok(()), t0);
+        let step = p.on_observation(&link_only(t0 + Duration::from_secs(2), LinkState::Disassociated));
+        assert!(step.events.is_empty() && matches!(step.next, NextAction::Idle { .. }), "{step:?}");
+        let later = p.on_observation(&link_only(t0 + Duration::from_secs(20), LinkState::Disassociated));
+        assert_eq!(later.next, NextAction::Act(RecoveryKind::Rejoin));
+    }
+
+    #[test]
+    fn paused_two_minutes_of_failures_never_act_and_resume_probes_at_once() {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        let step = p.set_paused(true, t0);
+        assert_eq!((step.health, step.events), (Health::Paused, vec![EventKind::Paused]));
+        // Everything a broken network can show, cycled for 2 min.
+        let mut t = t0;
+        let mut i = 0;
+        while t < t0 + Duration::from_secs(120) {
+            let o = match i % 5 {
+                0 => obs(t, ProbeKind::Dns, ProbeOutcome::Timeout),
+                1 => obs(t, ProbeKind::Http, ProbeOutcome::Timeout),
+                2 => obs(t, ProbeKind::Gateway, ProbeOutcome::Timeout),
+                3 => link_only(t, LinkState::Disassociated),
+                _ => link_only(t, LinkState::PoweredOff),
+            };
+            let step = p.on_observation(&o);
+            assert!(!matches!(step.next, NextAction::Act(_)), "acted while paused at {i}");
+            assert_eq!(step.health, Health::Paused);
+            assert!(step.events.is_empty(), "{:?}", step.events);
+            t += Duration::from_secs(1);
+            i += 1;
+        }
+        let step = p.set_paused(false, t);
+        assert_eq!(step.health, Health::Unknown);
+        assert_eq!(step.events, vec![EventKind::Resumed]);
+        assert!(matches!(step.next, NextAction::Probe { after: Duration::ZERO, .. }), "{:?}", step.next);
+        // Failures counted while paused would have sent this first failure straight to the gateway.
+        let after = p.on_observation(&obs(t + Duration::from_secs(2), ProbeKind::Dns, ProbeOutcome::Timeout));
+        assert!(matches!(after.next, NextAction::Probe { kind: ProbeKind::Http, .. }), "{:?}", after.next);
     }
 }
