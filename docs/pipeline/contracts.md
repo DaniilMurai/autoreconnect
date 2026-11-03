@@ -389,7 +389,7 @@ pub fn run_core(
 | ≥ `degraded_min_bad` failed/slow in the last `degraded_window` probes, not lost | → Degraded, log `connection_degraded` | Reassociate, then PowerCycle after `degraded_power_cycle_after`, then backoff, never less than `degraded_power_cycle_after` apart (≤ 2 actions in 3 min, AC-14) |
 | Link drops to Disassociated (OS event or poll) | link every `link_poll_interval` | Rejoin at once (`FromCache`), retries on `rejoin_backoff`; **never PowerCycle while not associated** (S-07: the AP may just be away) |
 | PoweredOff, not by us | → WifiOffByUser, log it | none until powered on (AC-5) |
-| PoweredOff within `own_power_cycle_window` after our PowerCycle | stays in the current state | power back on is part of PowerCycle |
+| PoweredOff or Disassociated within `own_power_cycle_window` after our PowerCycle | stays in the current state, no event, no Rejoin | power back on and the OS auto-join are part of PowerCycle |
 | Paused | link only, for the tray | none (AC-7) |
 | No credential for the network (macOS) | as usual | Rejoin/Reassociate skipped, `credential_missing` logged once per network; PowerCycle still allowed |
 

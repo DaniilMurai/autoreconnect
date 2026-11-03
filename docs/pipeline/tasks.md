@@ -91,7 +91,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-04
 
-- [ ] T-06 — Policy: Disassociated → Rejoin, and Pause
+- [x] T-06 — Policy: Disassociated → Rejoin, and Pause
       Files: src/core/policy.rs
       Do: Disassociated → `connectivity_lost {to: not_associated}`, Rejoin at once, retries on `rejoin_backoff`,
           never PowerCycle while not associated; `NotInRange` is normal; Paused = link only, no actions, no
