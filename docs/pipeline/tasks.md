@@ -80,7 +80,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: —
 
-- [ ] T-05 — Policy: Degraded state
+- [x] T-05 — Policy: Degraded state
       Files: src/core/policy.rs
       Do: sliding window of `degraded_window` probes, bad = failed or rtt ≥ `slow_rtt`; ≥ `degraded_min_bad`
           and not lost → Degraded + `connection_degraded {failed, slow, window}`; Reassociate, PowerCycle after

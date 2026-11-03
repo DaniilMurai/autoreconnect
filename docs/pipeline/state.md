@@ -1,15 +1,13 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-08, T-24, T-25 done 2026-11-03)
-- Next: T-05 Degraded state
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-07, T-08, T-24, T-25 done 2026-11-03)
+- Next: T-06 Disassociated → Rejoin, and Pause
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
-- Children (2026-11-03): T-08 merged. T-05 `local_2dc3e38c-1bb0-48ad-a962-cda6559e836f` (t05-degraded) is
-  needs-user: the AC-14 detection DoD (≤ 30 s at 40 % loss) fails in ~21 % of seeded runs — case: contract;
-  user chose a pass-rate DoD (tasks.md updated); the child is reworking. T-06 after T-05.
+- Children (2026-11-03): T-05, T-08 merged. T-06 running (session id below once started).
 - Updated: 2026-11-03
 
 ## Gates
