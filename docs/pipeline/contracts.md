@@ -383,10 +383,10 @@ pub fn run_core(
 |---|---|---|
 | Healthy | DNS every `healthy_probe_interval`; HTTP every `http_every_n`-th probe | none |
 | First failed or slow probe | switch to **suspect**: HTTP every `suspect_probe_interval` | none |
-| `lost_after_consecutive` failed probes in a row (the first may be DNS, the rest HTTP) | one Gateway probe decides | — |
+| `lost_after_consecutive` failed probes in a row (the first may be DNS, the rest HTTP), unless the window already had a bad probe before the run; then a whole failed window | one Gateway probe decides | — |
 | … and the gateway does not answer | → NoInternet, log `connectivity_lost` | Reassociate at once, then PowerCycle on `power_cycle_backoff`; ≥ `min_action_gap` between any two (AC-3) |
 | … and the gateway answers | → UpstreamDown, log `connectivity_lost {to: upstream_down}`; HTTP + Gateway every `upstream_probe_interval` | **none**; if the gateway stops answering → NoInternet path |
-| ≥ `degraded_min_bad` failed/slow in the last `degraded_window` probes, not lost | → Degraded, log `connection_degraded` | Reassociate, then PowerCycle after `degraded_power_cycle_after`, then backoff (≤ 2 actions in 3 min, AC-14) |
+| ≥ `degraded_min_bad` failed/slow in the last `degraded_window` probes, not lost | → Degraded, log `connection_degraded` | Reassociate, then PowerCycle after `degraded_power_cycle_after`, then backoff, never less than `degraded_power_cycle_after` apart (≤ 2 actions in 3 min, AC-14) |
 | Link drops to Disassociated (OS event or poll) | link every `link_poll_interval` | Rejoin at once (`FromCache`), retries on `rejoin_backoff`; **never PowerCycle while not associated** (S-07: the AP may just be away) |
 | PoweredOff, not by us | → WifiOffByUser, log it | none until powered on (AC-5) |
 | PoweredOff within `own_power_cycle_window` after our PowerCycle | stays in the current state | power back on is part of PowerCycle |
