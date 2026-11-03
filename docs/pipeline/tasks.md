@@ -123,13 +123,13 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: subagent
       Depends on: T-02
 
-- [ ] T-09 — Location permission
+- [x] T-09 — Location permission
       Files: src/platform/macos.rs (or macos/permissions.rs), src/main.rs, Cargo.toml (`objc2-core-location`)
       Do: `Permissions` per contracts on the main thread; request once at first launch; the result goes to
           `run_core`; `permission_missing {which: "location"}` once when denied.
       DoD: from the bundle: one Location prompt on first launch, none on the second; after "Allow" the `network`
-           field in `events.jsonl` is the real SSID; after "Don't Allow" (reset with `tccutil reset Location
-           dev.autoreconnect.app`) `permission_missing` is logged once and the app keeps probing.
+           field in `events.jsonl` is the real SSID; after "Don't Allow" (re-sign the bundle for a new cdhash, or
+           toggle the app off in Location Services: `tccutil reset Location` does not reset it on macOS 27.2) `permission_missing` is logged once and the app keeps probing.
       Executor: main loop (needs the user at the screen)
       Depends on: T-01, T-08
 
@@ -199,7 +199,8 @@ run by the user in their own terminal (brief.md, "How to run")._
       Files: src/ui/tray.rs (new), src/main.rs, Cargo.toml (`tray-icon`, `tao`)
       Do: tao event loop on the main thread, `UiModel` via `EventLoopProxy`; menu: status line, Pause/Resume,
           the last 5 reconnects with local times, "Retry password" when a credential is missing, "log unavailable"
-          when the sink fails, Quit; icon changes per Health.
+          when the sink fails, Quit; icon changes per Health. Move T-09's Location-prompt wait (now an `NSRunLoop`
+          poll, up to 60 s, in `main`) into the event loop and pass a later answer to the core.
       DoD: AC-7 (pause → no `recovery_action` under a 2-min block, tray shows paused; resume → AC-2 passes);
            AC-8 (5 menu lines match the last 5 `recovery_action` lines); icon checked by eye; AC-1 still < 60 MB RSS.
       Executor: main loop

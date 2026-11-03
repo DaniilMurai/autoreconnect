@@ -1,13 +1,13 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-24, T-25 done 2026-11-03)
-- Next: tasks that need the user (T-09 Location permission and on); no autonomous task is ready
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-24, T-25 done 2026-11-03)
+- Next: T-10 Credential store (macOS); every open task needs the user
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
-- Children (2026-11-03): T-05, T-06, T-08 merged. T-09 running with the user in `local_790cd7b8-425f-4dbd-b30d-fd666d01b1a3` (t09-location).
+- Children (2026-11-03): T-05, T-06, T-08, T-09 merged; none running.
 - Updated: 2026-11-03
 
 ## Gates
@@ -66,4 +66,5 @@
 - 2026-11-03 (T-08): launch the bundle with `open --env AUTORECONNECT_DRY_RUN=1`; a bare `open` drops shell env. Dry run is visible only in the process env (`ps eww`), not in events.jsonl.
 - 2026-11-03 (T-05, user): Degraded detection is statistical (window 6/3 at 40 % loss: ~11 % late by chance alone) → DoD is a pass rate over seeded runs; the live AC-14 pf run is the real check.
 - 2026-11-03 (T-06): Disassociated within `own_power_cycle_window` is part of our PowerCycle (no event, no Rejoin); Rejoin is outside `min_action_gap`; Pause keeps the PowerCycle backoff.
+- 2026-11-03 (T-09): `tccutil reset Location <bundle id>` does not reset on macOS 27.2; a re-signed bundle (new cdhash) prompts again. Until T-16, `main` polls Location for up to 60 s before starting the core; an unanswered prompt = no SSID, no `permission_missing`.
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).
