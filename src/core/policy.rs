@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -92,11 +93,16 @@ pub struct Policy {
     health: Health,
     healthy_probes: u32,
     failures: u8,
+    /// Start of the current outage or degradation, for `downtime_ms`.
     lost_at: Option<Instant>,
-    next_action_at: Option<Instant>,
+    /// Last `degraded_window` DNS/HTTP probes as (failed, slow).
+    window: VecDeque<(bool, bool)>,
+    healthy_since: Option<Instant>,
+    last_action_at: Option<Instant>,
     power_cycles: usize,
     reassociate_allowed: bool,
     reassociated: bool,
+    degraded_episode: bool,
     own_power_cycle_until: Option<Instant>,
     settle_until: Option<Instant>,
 }
@@ -109,11 +115,14 @@ impl Policy {
             healthy_probes: 0,
             failures: 0,
             lost_at: None,
-            next_action_at: None,
+            window: VecDeque::new(),
+            healthy_since: None,
+            last_action_at: None,
             power_cycles: 0,
             // Off until `run` confirms the credential and Location; a wrong guess would loop on a doomed action.
             reassociate_allowed: false,
             reassociated: false,
+            degraded_episode: false,
             own_power_cycle_until: None,
             settle_until: None,
         }
@@ -158,22 +167,69 @@ impl Policy {
         if probe.outcome == ProbeOutcome::NotReady || (settling && (probe.kind == ProbeKind::Gateway || probe.outcome != ProbeOutcome::Ok)) {
             return self.step(events, NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval });
         }
-        match (probe.kind, probe.outcome == ProbeOutcome::Ok) {
+        let ok = probe.outcome == ProbeOutcome::Ok;
+        let lost = matches!(self.health, Health::NoInternet | Health::UpstreamDown);
+        // A whole window of failures in a row was an outage; nothing before it says anything about the link now.
+        if ok && lost && self.failures >= self.cfg.degraded_window {
+            self.window.clear();
+        }
+        // Nothing is recorded while lost: those failures describe the outage, not the link quality.
+        if probe.kind != ProbeKind::Gateway && !lost {
+            if self.window.len() >= usize::from(self.cfg.degraded_window) {
+                self.window.pop_front();
+            }
+            self.window.push_back((!ok, ok && probe.rtt >= self.cfg.slow_rtt));
+        }
+        match (probe.kind, ok) {
             (ProbeKind::Gateway, true) => self.upstream_down(obs.at, events),
             (ProbeKind::Gateway, false) => self.wifi_broken(obs.at, events),
-            (_, true) => self.healthy(obs.at, events),
+            (_, true) => {
+                self.failures = 0;
+                let (failed, slow) = self.window_counts();
+                let bad = failed + slow;
+                // Leaving Degraded needs a clean window, or 40 % loss flaps Healthy/Degraded every few probes.
+                if bad >= self.cfg.degraded_min_bad || (self.health == Health::Degraded && bad > 0) {
+                    self.degraded(obs.at, failed, slow, self.cfg.suspect_probe_interval, events)
+                } else {
+                    self.healthy(obs.at, events)
+                }
+            }
             (_, false) => {
                 self.failures = self.failures.saturating_add(1);
+                let after = self.cfg.suspect_probe_interval.saturating_sub(probe.rtt);
+                let (failed, slow) = self.window_counts();
+                // A bad probe before this run of failures means the link was already lossy: under 40 % loss
+                // three in a row come every ~15 probes, and sending each run to the gateway check flapped into
+                // NoInternet/UpstreamDown and wiped the window. A clean link before the run (AC-2) still goes there.
+                let lossy = self.health == Health::Degraded
+                    || (failed + slow >= self.cfg.degraded_min_bad && self.window.iter().rev().skip(usize::from(self.failures)).any(|(f, s)| *f || *s));
+                let lost_after = if lossy && !lost { self.cfg.degraded_window } else { self.cfg.lost_after_consecutive };
                 // Only the gateway tells a broken Wi-Fi from a dead upstream (slice finding 2026-11-03).
-                let next = if self.failures >= self.cfg.lost_after_consecutive {
-                    NextAction::Probe { kind: ProbeKind::Gateway, after: Duration::ZERO }
-                } else {
-                    let after = self.cfg.suspect_probe_interval.saturating_sub(probe.rtt);
-                    NextAction::Probe { kind: ProbeKind::Http, after }
-                };
-                self.step(events, next)
+                if self.failures >= lost_after {
+                    return self.step(events, NextAction::Probe { kind: ProbeKind::Gateway, after: Duration::ZERO });
+                }
+                if lossy && !lost {
+                    return self.degraded(obs.at, failed, slow, after, events);
+                }
+                self.step(events, NextAction::Probe { kind: ProbeKind::Http, after })
             }
         }
+    }
+
+    /// The run that sent us to the gateway stays as one bad probe: as three it would make the first good probe
+    /// after a short outage look degraded; dropped, a lossy link that flaps through the gateway check would
+    /// never collect enough bad probes to show as Degraded.
+    fn mark_lost_spell(&mut self) {
+        while self.window.back().is_some_and(|(failed, _)| *failed) {
+            self.window.pop_back();
+        }
+        self.window.push_back((true, false));
+    }
+
+    fn window_counts(&self) -> (u8, u8) {
+        let failed = self.window.iter().filter(|(f, _)| *f).count() as u8;
+        let slow = self.window.iter().filter(|(_, s)| *s).count() as u8;
+        (failed, slow)
     }
 
     fn healthy(&mut self, at: Instant, mut events: Vec<EventKind>) -> Step {
@@ -181,21 +237,64 @@ impl Policy {
             let downtime_ms = at.saturating_duration_since(lost).as_millis() as u64;
             events.push(EventKind::ConnectivityRestored { downtime_ms });
         }
+        if self.health != Health::Healthy {
+            self.healthy_since = Some(at);
+        }
         self.health = Health::Healthy;
         self.failures = 0;
-        self.next_action_at = None;
-        self.power_cycles = 0;
-        self.reassociated = false;
+        // A short healthy spell under heavy loss must not restart the cheap-action-first schedule.
+        if self.healthy_since.is_some_and(|t| at.saturating_duration_since(t) >= self.cfg.degraded_power_cycle_after) {
+            self.last_action_at = None;
+            self.power_cycles = 0;
+            self.reassociated = false;
+            self.degraded_episode = false;
+        }
         self.healthy_probes += 1;
+        if self.window_counts() != (0, 0) {
+            return self.step(events, NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval });
+        }
         let kind = if self.healthy_probes % self.cfg.http_every_n == 0 { ProbeKind::Http } else { ProbeKind::Dns };
         self.step(events, NextAction::Probe { kind, after: self.cfg.healthy_probe_interval })
+    }
+
+    fn degraded(&mut self, at: Instant, failed: u8, slow: u8, after: Duration, mut events: Vec<EventKind>) -> Step {
+        if self.health != Health::Degraded {
+            self.health = Health::Degraded;
+            self.lost_at.get_or_insert(at);
+            self.degraded_episode = true;
+            events.push(EventKind::ConnectionDegraded { failed, slow, window: self.cfg.degraded_window });
+        }
+        if self.action_due(at) {
+            return self.step(events, NextAction::Act(self.recovery_kind()));
+        }
+        self.step(events, NextAction::Probe { kind: ProbeKind::Http, after })
+    }
+
+    /// The cheap action goes first, once per episode; the gap and backoff only throttle what follows.
+    fn recovery_kind(&self) -> RecoveryKind {
+        if self.reassociate_allowed && !self.reassociated { RecoveryKind::Reassociate } else { RecoveryKind::PowerCycle }
+    }
+
+    fn action_due(&self, at: Instant) -> bool {
+        let Some(last) = self.last_action_at else { return true };
+        let backoff = &self.cfg.power_cycle_backoff;
+        let mut gap = match self.power_cycles {
+            0 => self.cfg.min_action_gap,
+            n => backoff[(n - 1).min(backoff.len() - 1)].max(self.cfg.min_action_gap),
+        };
+        // Degraded traffic still flows, so every action costs the user more than it does in an outage (AC-14).
+        // Kept for the whole episode: under loss the gateway check can briefly land in NoInternet.
+        if self.degraded_episode {
+            gap = gap.max(self.cfg.degraded_power_cycle_after);
+        }
+        at >= last + gap
     }
 
     fn upstream_down(&mut self, at: Instant, mut events: Vec<EventKind>) -> Step {
         if self.health != Health::UpstreamDown {
             self.health = Health::UpstreamDown;
             self.lost_at.get_or_insert(at);
-            self.next_action_at = None;
+            self.mark_lost_spell();
             events.push(EventKind::ConnectivityLost { to: Health::UpstreamDown });
         }
         self.step(events, NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.upstream_probe_interval })
@@ -205,30 +304,25 @@ impl Policy {
         if self.health != Health::NoInternet {
             self.health = Health::NoInternet;
             self.lost_at.get_or_insert(at);
-            self.next_action_at.get_or_insert(at);
+            self.mark_lost_spell();
             events.push(EventKind::ConnectivityLost { to: Health::NoInternet });
         }
-        if self.next_action_at.is_some_and(|t| at >= t) {
-            // The cheap action goes first, once per outage; the gap and backoff only throttle what follows.
-            let kind = if self.reassociate_allowed && !self.reassociated { RecoveryKind::Reassociate } else { RecoveryKind::PowerCycle };
-            return self.step(events, NextAction::Act(kind));
+        if self.action_due(at) {
+            return self.step(events, NextAction::Act(self.recovery_kind()));
         }
         self.step(events, NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval })
     }
 
     pub fn on_action_done(&mut self, kind: RecoveryKind, result: &Result<(), WifiError>, at: Instant) -> Step {
         let _ = result;
+        self.last_action_at = Some(at);
         if kind == RecoveryKind::Reassociate {
             self.reassociated = true;
-            self.next_action_at = Some(at + self.cfg.min_action_gap);
         }
         if kind == RecoveryKind::PowerCycle {
             self.own_power_cycle_until = Some(at + self.cfg.own_power_cycle_window);
             self.settle_until = Some(at + self.cfg.settle_after_power_cycle);
-            let backoff = &self.cfg.power_cycle_backoff;
-            let wait = backoff[self.power_cycles.min(backoff.len() - 1)];
             self.power_cycles += 1;
-            self.next_action_at = Some(at + wait.max(self.cfg.min_action_gap));
         }
         self.step(Vec::new(), NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval })
     }
@@ -398,5 +492,135 @@ mod tests {
         }
         let step = p.on_observation(&obs(done + Duration::from_secs(6), ProbeKind::Http, ProbeOutcome::Ok));
         assert_eq!(step.health, Health::Healthy);
+    }
+
+    /// What one simulated AC-14 run saw, in seconds since the loss started.
+    struct LossRun {
+        degraded_at: Option<Duration>,
+        actions: Vec<(Duration, RecoveryKind)>,
+        restored_after_end: Option<Duration>,
+    }
+
+    /// Drives the policy the way the core loop would: each probe (gateway included) is lost with `loss`
+    /// for `loss_for`, then the loss ends; runs until a minute after that. splitmix64 keeps it reproducible.
+    fn simulate_loss(seed: u64, loss: f64, loss_for: Duration) -> LossRun {
+        let cfg = Config::default();
+        let mut p = Policy::new(cfg.clone());
+        p.set_capabilities(true);
+        let mut state = seed;
+        let mut lost = move || {
+            state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            ((z >> 11) as f64 / (1u64 << 53) as f64) < loss
+        };
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        let (mut kind, mut start) = (ProbeKind::Dns, t0 + Duration::from_secs(1));
+        let mut run = LossRun { degraded_at: None, actions: Vec::new(), restored_after_end: None };
+        while start < t0 + loss_for + Duration::from_secs(60) {
+            let in_loss = start < t0 + loss_for;
+            let outcome = if in_loss && lost() { ProbeOutcome::Timeout } else { ProbeOutcome::Ok };
+            let o = obs(start, kind, outcome);
+            let done = start + o.probe.as_ref().unwrap().rtt;
+            let mut step = p.on_observation(&Observation { at: done, ..o });
+            let mut t = done;
+            for e in &step.events {
+                match e {
+                    EventKind::ConnectionDegraded { .. } => {
+                        run.degraded_at.get_or_insert(t - t0);
+                    }
+                    EventKind::ConnectivityRestored { .. } if !in_loss => {
+                        run.restored_after_end.get_or_insert(t - (t0 + loss_for));
+                    }
+                    _ => {}
+                }
+            }
+            if let NextAction::Act(k) = step.next {
+                run.actions.push((t - t0, k));
+                // Reassociate took 6.2 s in the contract's sample line; PowerCycle is off_time + join.
+                t += Duration::from_secs(6);
+                step = p.on_action_done(k, &Ok(()), t);
+            }
+            match step.next {
+                NextAction::Probe { kind: k, after } => (kind, start) = (k, t + after),
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+        run
+    }
+
+    /// The DoD as pass rates over 500 seeded runs: with the contract's window (6/3), 1 s suspect cadence and
+    /// 3 s healthy cadence, about a fifth of runs are statistically late, so a single seed proves nothing.
+    #[test]
+    fn ac14_random_loss_degrades_fast_and_acts_at_most_twice() {
+        let three_min = Duration::from_secs(180);
+        let runs: Vec<_> = (1..=500).map(|seed| simulate_loss(seed, 0.4, three_min)).collect();
+        let rate = |f: &dyn Fn(&LossRun) -> bool| runs.iter().filter(|r| f(r)).count() as f64 / runs.len() as f64;
+        let fast = rate(&|r| r.degraded_at.is_some_and(|d| d <= Duration::from_secs(30)));
+        let few = rate(&|r| r.actions.iter().filter(|(t, _)| *t < three_min).count() <= 2);
+        let first = rate(&|r| r.actions.first().map(|a| a.1) == Some(RecoveryKind::Reassociate));
+        let restored = rate(&|r| r.restored_after_end.is_some_and(|d| d <= Duration::from_secs(10)));
+        let summary = format!(
+            "500 runs: degraded <= 30 s {:.1} %, <= 2 actions {:.1} %, first reassociate {:.1} %, restored <= 10 s {:.1} % (not asserted)",
+            fast * 100.0, few * 100.0, first * 100.0, restored * 100.0
+        );
+        println!("{summary}");
+        assert!(fast >= 0.75 && few >= 0.99 && first == 1.0, "{summary}");
+    }
+
+    #[test]
+    fn isolated_slow_probes_on_healthy_wifi_do_not_degrade() {
+        let cfg = Config::default();
+        let mut p = Policy::new(cfg.clone());
+        p.set_capabilities(true);
+        let mut t = Instant::now();
+        let mut kind = ProbeKind::Dns;
+        for i in 0..600 {
+            // Pairs of slow probes every 7th probe: never more than 2 bad in a window of 6.
+            let rtt = if i % 7 < 2 { cfg.slow_rtt + Duration::from_millis(200) } else { Duration::from_millis(50) };
+            let probe = ProbeResult { kind, started: t, rtt, outcome: ProbeOutcome::Ok };
+            t += rtt;
+            let step = p.on_observation(&Observation { at: t, link: associated(), probe: Some(probe) });
+            assert_eq!(step.health, Health::Healthy, "probe {i}");
+            assert!(step.events.is_empty(), "probe {i}: {:?}", step.events);
+            match step.next {
+                NextAction::Probe { kind: k, after } => (kind, t) = (k, t + after),
+                other => panic!("probe {i}: unexpected {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn slow_connection_degrades_then_clean_window_restores() {
+        let cfg = Config::default();
+        let mut p = Policy::new(cfg.clone());
+        let t0 = Instant::now();
+        let slow = |at: Instant, rtt: Duration| Observation {
+            at,
+            link: associated(),
+            probe: Some(ProbeResult { kind: ProbeKind::Http, started: at - rtt, rtt, outcome: ProbeOutcome::Ok }),
+        };
+        let mut steps = Vec::new();
+        for i in 0..3 {
+            steps.push(p.on_observation(&slow(t0 + Duration::from_secs(2 * i), Duration::from_secs(2))));
+        }
+        assert_eq!(steps[2].health, Health::Degraded);
+        assert_eq!(steps[2].events, vec![EventKind::ConnectionDegraded { failed: 0, slow: 3, window: cfg.degraded_window }]);
+        assert_eq!(steps[2].next, NextAction::Act(RecoveryKind::PowerCycle), "no credential: PowerCycle is the only action");
+        let done = t0 + Duration::from_secs(10);
+        p.on_action_done(RecoveryKind::PowerCycle, &Ok(()), done);
+        let mut last = None;
+        for i in 0..usize::from(cfg.degraded_window) {
+            last = Some(p.on_observation(&slow(done + Duration::from_secs(11 + i as u64), Duration::from_millis(50))));
+            if i + 1 < usize::from(cfg.degraded_window) {
+                assert_eq!(last.as_ref().unwrap().health, Health::Degraded, "left Degraded before a clean window");
+            }
+        }
+        let last = last.unwrap();
+        assert_eq!(last.health, Health::Healthy);
+        assert!(matches!(last.events[..], [EventKind::ConnectivityRestored { .. }]));
     }
 }
