@@ -1,0 +1,3 @@
+{"ts":"2026-11-03T14:00:06.200+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_lost","detail":{"to":"no_internet"}}
+{"ts":"2026-11-03T14:00:09.400+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"reassociate","ok":true,"duration_ms":4500,"error":null}}
+{"ts":"2026-11-03T14:00:46.700+01:00","health":"healthy","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_restored","detail":{"downtime_ms":40500}}

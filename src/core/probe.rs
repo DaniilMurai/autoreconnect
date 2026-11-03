@@ -1,8 +1,9 @@
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
+use std::num::NonZeroU32;
+use std::time::{Duration, Instant};
 
 use socket2::{Domain, Protocol, Socket, Type};
-use std::time::{Duration, Instant};
 
 use super::model::{ProbeKind, ProbeOutcome, ProbeResult, ProbeTargets};
 
@@ -23,13 +24,14 @@ impl Prober for NetProber {
     fn probe(&self, kind: ProbeKind, targets: &ProbeTargets, timeout: Duration) -> ProbeResult {
         let started = Instant::now();
         let outcome = match kind {
-            ProbeKind::Dns => self.dns(&targets.resolvers, timeout),
+            _ if targets.interface.is_none() => ProbeOutcome::NotReady,
+            ProbeKind::Dns => self.dns(&targets.resolvers, targets.interface, timeout),
             ProbeKind::Http => match targets.http_addr {
-                Some(addr) => self.http(addr, timeout),
+                Some(addr) => self.http(addr, targets.interface, timeout),
                 None => ProbeOutcome::NotReady,
             },
             ProbeKind::Gateway => match targets.gateway {
-                Some(IpAddr::V4(gw)) => ping(gw, timeout),
+                Some(IpAddr::V4(gw)) => ping(gw, targets.interface, timeout),
                 Some(IpAddr::V6(_)) | None => ProbeOutcome::NotReady,
             },
         };
@@ -42,7 +44,7 @@ impl Prober for NetProber {
 }
 
 impl NetProber {
-    fn dns(&self, resolvers: &[IpAddr], timeout: Duration) -> ProbeOutcome {
+    fn dns(&self, resolvers: &[IpAddr], iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
         let Some(&resolver) = resolvers.first() else { return ProbeOutcome::NotReady };
         let mut id = [0u8; 2];
         let mut label = [0u8; 8];
@@ -53,9 +55,8 @@ impl NetProber {
         let label: String = label.iter().map(|b| format!("{b:02x}")).collect();
         let query = dns_query(id, &format!("{label}.{}", self.dns_zone));
 
-        let bind = if resolver.is_ipv4() { SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)) } else { "[::]:0".parse().unwrap() };
-        let sock = match UdpSocket::bind(bind) {
-            Ok(s) => s,
+        let sock: UdpSocket = match bound_socket(&resolver, Type::DGRAM, Protocol::UDP, iface) {
+            Ok(s) => s.into(),
             Err(e) => return io_outcome(&e),
         };
         if let Err(e) = sock.set_read_timeout(Some(timeout)).and(sock.send_to(&query, (resolver, 53)).map(|_| ())) {
@@ -80,10 +81,12 @@ impl NetProber {
         }
     }
 
-    fn http(&self, addr: SocketAddr, timeout: Duration) -> ProbeOutcome {
+    fn http(&self, addr: SocketAddr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
         let deadline = Instant::now() + timeout;
-        let mut stream = match TcpStream::connect_timeout(&addr, timeout) {
-            Ok(s) => s,
+        let connected = bound_socket(&addr.ip(), Type::STREAM, Protocol::TCP, iface)
+            .and_then(|s| s.connect_timeout(&addr.into(), timeout).map(|()| s));
+        let mut stream: TcpStream = match connected {
+            Ok(s) => s.into(),
             Err(e) => return io_outcome(&e),
         };
         let left = deadline.saturating_duration_since(Instant::now()).max(Duration::from_millis(1));
@@ -111,8 +114,8 @@ impl NetProber {
 }
 
 /// ICMP echo over a datagram socket, which macOS allows without root (verified 2026-11-03).
-fn ping(gateway: Ipv4Addr, timeout: Duration) -> ProbeOutcome {
-    let sock: UdpSocket = match Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::ICMPV4)) {
+fn ping(gateway: Ipv4Addr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
+    let sock: UdpSocket = match bound_socket(&IpAddr::V4(gateway), Type::DGRAM, Protocol::ICMPV4, iface) {
         Ok(s) => s.into(),
         Err(e) => return io_outcome(&e),
     };
@@ -137,6 +140,16 @@ fn ping(gateway: Ipv4Addr, timeout: Duration) -> ProbeOutcome {
             return ProbeOutcome::Ok;
         }
     }
+}
+
+/// A socket bound to `iface` (`IP_BOUND_IF` on macOS), so it leaves through Wi-Fi whatever the routing table says.
+fn bound_socket(peer: &IpAddr, ty: Type, proto: Protocol, iface: Option<NonZeroU32>) -> std::io::Result<Socket> {
+    let sock = Socket::new(Domain::for_address(SocketAddr::new(*peer, 0)), ty, Some(proto))?;
+    match peer {
+        IpAddr::V4(_) => sock.bind_device_by_index_v4(iface)?,
+        IpAddr::V6(_) => sock.bind_device_by_index_v6(iface)?,
+    }
+    Ok(sock)
 }
 
 fn checksum(data: &[u8]) -> u16 {
@@ -168,5 +181,41 @@ fn io_outcome(e: &std::io::Error) -> ProbeOutcome {
         | ErrorKind::NetworkUnreachable
         | ErrorKind::PermissionDenied => ProbeOutcome::Refused,
         _ => ProbeOutcome::Io(e.to_string()),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    fn index(name: &str) -> Option<NonZeroU32> {
+        let c = std::ffi::CString::new(name).unwrap();
+        NonZeroU32::new(unsafe { libc::if_nametoindex(c.as_ptr()) })
+    }
+
+    /// Needs Wi-Fi on en0 with internet: `cargo test --release -- --ignored`.
+    /// Pinned to loopback, the same probe must not get out, so the binding really steers egress.
+    #[test]
+    #[ignore]
+    fn probes_leave_only_through_the_bound_interface() {
+        let prober = NetProber {
+            dns_zone: "google.com".into(),
+            http_host: "captive.apple.com".into(),
+            http_path: "/hotspot-detect.html".into(),
+            http_expect_status: 200,
+            http_expect_body: "Success".into(),
+        };
+        let mut t = ProbeTargets {
+            interface: index("en0"),
+            resolvers: vec!["1.1.1.1".parse().unwrap()],
+            gateway: None,
+            http_addr: prober.resolve_http(),
+        };
+        let timeout = Duration::from_secs(2);
+        assert_eq!(prober.probe(ProbeKind::Dns, &t, timeout).outcome, ProbeOutcome::Ok);
+        assert_eq!(prober.probe(ProbeKind::Http, &t, timeout).outcome, ProbeOutcome::Ok);
+        t.interface = index("lo0");
+        assert_ne!(prober.probe(ProbeKind::Dns, &t, timeout).outcome, ProbeOutcome::Ok);
+        assert_ne!(prober.probe(ProbeKind::Http, &t, timeout).outcome, ProbeOutcome::Ok);
     }
 }

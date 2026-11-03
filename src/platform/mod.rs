@@ -4,6 +4,7 @@ pub mod macos;
 use crossbeam_channel::Sender;
 
 use crate::core::model::{LinkEvent, LinkState, NetworkId, ProbeTargets, WifiError};
+use crate::core::probe::Prober;
 
 /// No Serialize and a redacted Debug, so the Wi-Fi password cannot reach the event log.
 pub struct Secret(String);
@@ -37,4 +38,18 @@ pub trait WifiControl {
     fn set_power(&self, on: bool) -> Result<(), WifiError>;
     fn subscribe(&mut self, events: Sender<LinkEvent>) -> Result<(), WifiError>;
     fn probe_targets(&self) -> ProbeTargets;
+}
+
+/// Grows a `creds` field in T-10 and a `login` field in T-17.
+pub struct Platform {
+    pub wifi: Box<dyn WifiControl>,
+    pub prober: Box<dyn Prober>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PermissionState {
+    NotDetermined,
+    Granted,
+    Denied,
+    NotApplicable,
 }

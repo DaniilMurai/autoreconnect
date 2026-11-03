@@ -1,0 +1,9 @@
+{"ts":"2026-11-03T14:00:03.000+01:00","health":"not_associated","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_lost","detail":{"to":"not_associated"}}
+{"ts":"2026-11-03T14:00:06.500+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":4500,"error":null}}
+{"ts":"2026-11-03T14:00:08.000+01:00","health":"healthy","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_restored","detail":{"downtime_ms":8000}}
+{"ts":"2026-11-03T14:01:03.000+01:00","health":"not_associated","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_lost","detail":{"to":"not_associated"}}
+{"ts":"2026-11-03T14:01:06.500+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":4500,"error":null}}
+{"ts":"2026-11-03T14:01:09.000+01:00","health":"healthy","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_restored","detail":{"downtime_ms":8000}}
+{"ts":"2026-11-03T14:02:03.000+01:00","health":"not_associated","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_lost","detail":{"to":"not_associated"}}
+{"ts":"2026-11-03T14:02:06.500+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":4500,"error":null}}
+{"ts":"2026-11-03T14:02:10.000+01:00","health":"healthy","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_restored","detail":{"downtime_ms":8000}}

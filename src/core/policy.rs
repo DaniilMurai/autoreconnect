@@ -31,6 +31,8 @@ pub struct Config {
     pub http_expect_body: String,
     pub log_dir: PathBuf,
     pub log_max_bytes: u64,
+    /// `time` refuses to read the local offset once a second thread exists, so it is read with the config.
+    pub utc_offset: time::UtcOffset,
 }
 
 impl Default for Config {
@@ -66,6 +68,7 @@ impl Default for Config {
             http_expect_body: "Success".into(),
             log_dir,
             log_max_bytes: 5_000_000,
+            utc_offset: time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC),
         }
     }
 }
@@ -92,6 +95,8 @@ pub struct Policy {
     lost_at: Option<Instant>,
     next_action_at: Option<Instant>,
     power_cycles: usize,
+    reassociate_allowed: bool,
+    reassociated: bool,
     own_power_cycle_until: Option<Instant>,
     settle_until: Option<Instant>,
 }
@@ -106,9 +111,17 @@ impl Policy {
             lost_at: None,
             next_action_at: None,
             power_cycles: 0,
+            // Off until `run` confirms the credential and Location; a wrong guess would loop on a doomed action.
+            reassociate_allowed: false,
+            reassociated: false,
             own_power_cycle_until: None,
             settle_until: None,
         }
+    }
+
+    /// Whether Reassociate/Rejoin can work (credential and Location available); PowerCycle never depends on it.
+    pub fn set_capabilities(&mut self, reassociate_allowed: bool) {
+        self.reassociate_allowed = reassociate_allowed;
     }
 
     pub fn health(&self) -> Health {
@@ -172,6 +185,7 @@ impl Policy {
         self.failures = 0;
         self.next_action_at = None;
         self.power_cycles = 0;
+        self.reassociated = false;
         self.healthy_probes += 1;
         let kind = if self.healthy_probes % self.cfg.http_every_n == 0 { ProbeKind::Http } else { ProbeKind::Dns };
         self.step(events, NextAction::Probe { kind, after: self.cfg.healthy_probe_interval })
@@ -195,14 +209,19 @@ impl Policy {
             events.push(EventKind::ConnectivityLost { to: Health::NoInternet });
         }
         if self.next_action_at.is_some_and(|t| at >= t) {
-            // Slice: Reassociate needs the credential and Location; PowerCycle stands in for it.
-            return self.step(events, NextAction::Act(RecoveryKind::PowerCycle));
+            // The cheap action goes first, once per outage; the gap and backoff only throttle what follows.
+            let kind = if self.reassociate_allowed && !self.reassociated { RecoveryKind::Reassociate } else { RecoveryKind::PowerCycle };
+            return self.step(events, NextAction::Act(kind));
         }
         self.step(events, NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval })
     }
 
     pub fn on_action_done(&mut self, kind: RecoveryKind, result: &Result<(), WifiError>, at: Instant) -> Step {
         let _ = result;
+        if kind == RecoveryKind::Reassociate {
+            self.reassociated = true;
+            self.next_action_at = Some(at + self.cfg.min_action_gap);
+        }
         if kind == RecoveryKind::PowerCycle {
             self.own_power_cycle_until = Some(at + self.cfg.own_power_cycle_window);
             self.settle_until = Some(at + self.cfg.settle_after_power_cycle);
@@ -296,6 +315,60 @@ mod tests {
         assert_eq!(step.health, Health::NoInternet);
         assert_eq!(step.next, NextAction::Act(RecoveryKind::PowerCycle));
         assert!(decided.duration_since(t0) <= Duration::from_secs(10), "lost after {:?}", decided.duration_since(t0));
+    }
+
+    /// Runs a 30-min AC-2 block (gateway never answers) and returns (time since block start, action) pairs.
+    fn simulate_block(reassociate_allowed: bool) -> Vec<(Duration, RecoveryKind)> {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(reassociate_allowed);
+        let t0 = Instant::now();
+        let end = t0 + Duration::from_secs(30 * 60);
+        let mut t = t0;
+        let mut actions = Vec::new();
+        while t < end {
+            let step = p.on_observation(&obs(t, ProbeKind::Gateway, ProbeOutcome::Timeout));
+            let advance = match step.next {
+                NextAction::Act(kind) => {
+                    actions.push((t - t0, kind));
+                    // PowerCycle takes about off_time + join; the exact cost only shifts the schedule.
+                    t += Duration::from_secs(5);
+                    p.on_action_done(kind, &Ok(()), t);
+                    Duration::from_secs(1)
+                }
+                _ => Duration::from_secs(1),
+            };
+            t += advance;
+        }
+        actions
+    }
+
+    fn assert_ac3(actions: &[(Duration, RecoveryKind)]) {
+        let cycles: Vec<Duration> = actions.iter().filter(|(_, k)| *k == RecoveryKind::PowerCycle).map(|(t, _)| *t).collect();
+        assert!((1..=8).contains(&cycles.len()), "{} power-cycles", cycles.len());
+        for w in actions.windows(2) {
+            assert!(w[1].0 - w[0].0 >= Config::default().min_action_gap, "actions too close: {actions:?}");
+        }
+        let gaps: Vec<Duration> = cycles.windows(2).map(|w| w[1] - w[0]).collect();
+        for w in gaps.windows(2) {
+            assert!(w[1] >= w[0], "gap shrank: {gaps:?}");
+        }
+        assert!(gaps.iter().all(|g| *g <= Duration::from_secs(600) + Duration::from_secs(10)), "gap over 10 min: {gaps:?}");
+    }
+
+    #[test]
+    fn ac2_block_reassociates_first_then_power_cycles_on_backoff() {
+        let actions = simulate_block(true);
+        assert_eq!(actions[0].1, RecoveryKind::Reassociate);
+        assert_eq!(actions.iter().filter(|(_, k)| *k == RecoveryKind::Reassociate).count(), 1);
+        assert_ac3(&actions);
+    }
+
+    #[test]
+    fn ac2_block_without_reassociate_starts_with_power_cycle() {
+        let actions = simulate_block(false);
+        assert_eq!(actions[0].1, RecoveryKind::PowerCycle);
+        assert!(actions.iter().all(|(_, k)| *k == RecoveryKind::PowerCycle));
+        assert_ac3(&actions);
     }
 
     #[test]

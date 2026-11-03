@@ -55,6 +55,9 @@ pub enum ProbeKind {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ProbeTargets {
+    /// Index of the Wi-Fi interface; every probe socket is bound to it, because with a second
+    /// uplink the routing table sends LAN and DNS traffic elsewhere (T-01 run, S-06).
+    pub interface: Option<std::num::NonZeroU32>,
     pub resolvers: Vec<std::net::IpAddr>,
     pub gateway: Option<std::net::IpAddr>,
     pub http_addr: Option<std::net::SocketAddr>,

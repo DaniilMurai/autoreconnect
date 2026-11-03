@@ -1,0 +1,2 @@
+{"ts":"2026-11-03T14:00:01.200+01:00","health":"wifi_off_by_user","signal":null,"network":"Home-5G","event":"wifi_off_by_user"}
+{"ts":"2026-11-03T14:01:00.000+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"power_cycle","ok":true,"duration_ms":4500,"error":null}}

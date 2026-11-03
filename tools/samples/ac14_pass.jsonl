@@ -1,0 +1,4 @@
+{"ts":"2026-11-03T14:00:18.000+01:00","health":"degraded","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connection_degraded","detail":{"failed":4,"slow":2,"window":10}}
+{"ts":"2026-11-03T14:00:20.000+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"reassociate","ok":true,"duration_ms":4500,"error":null}}
+{"ts":"2026-11-03T14:01:35.000+01:00","health":"no_internet","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"recovery_action","detail":{"kind":"power_cycle","ok":true,"duration_ms":4500,"error":null}}
+{"ts":"2026-11-03T14:03:05.000+01:00","health":"healthy","signal":{"rssi_dbm":-67,"noise_dbm":-92,"tx_rate_mbps":433.0},"network":"Home-5G","event":"connectivity_restored","detail":{"downtime_ms":167000}}

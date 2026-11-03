@@ -1,8 +1,8 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 5 — vertical slice (done 2026-11-03: AC-2 passed live, awaiting gate)
-- Next: stage 6 — tasks
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-24 done 2026-11-03)
+- Next: T-25 gateway check where the router ignores ping (spike first), then T-03
 - Updated: 2026-11-03
 
 ## Gates
@@ -15,6 +15,8 @@
 | 3 spikes | S-01…S-07 done (S-07 2026-11-03: macOS fast after a clean AP outage); S-08 pending (Android, desk) | spikes/FINDINGS.md |
 | 4 contracts | done 2026-11-03; revised after the slice (gateway probe, UpstreamDown, NotReady, settle, dry run) | contracts.md |
 | 5 slice | done 2026-11-03: AC-2 live 6.2 s / 9.4 s / 6.7 s; How to run written | src/, Cargo.toml, brief.md |
+| 6 tasks | done 2026-11-03, go given: T-01…T-23 (core 7, macOS 8, tray/login 3, Windows 3, hand-off 2); Android none until S-08 | tasks.md |
+| 7 implementation | T-01, T-02, T-03, T-04, T-07, T-24 done 2026-11-03 (T-03/04/07 from the parallel session, merged here); T-24 and T-25 added from live runs | tasks.md |
 
 ## Draft decisions (collect into decisions.md at stage 9)
 
@@ -46,4 +48,13 @@
 - 2026-11-03 (contracts): without the password or Location, rejoin is off for that network but detection and power-cycle keep working.
 - 2026-11-03 (slice): gateway ping decides Wi-Fi broken (act) vs upstream down (log only); unprivileged ICMP works on macOS.
 - 2026-11-03 (slice): no failure counting for 10 s after our own power-cycle; missing resolver/gateway = NotReady, not failure.
+- 2026-11-03 (tasks): AC runs recorded in docs/pipeline/runs/; a FAIL there becomes a new task, not an inline fix; tools/check_log.py checks the numeric ACs.
+- 2026-11-03 (tasks): Policy gets an input for "rejoin/reassociate allowed" (credential + Location), set by run — an addition to the contract signatures.
+- 2026-11-03 (T-01): `Config` gets `utc_offset`, read with the config before any thread starts (`time` refuses later); `Platform` grows its `creds`/`login` fields in T-10/T-17; platform objects are built on the core thread (CoreWLAN is not Send).
+- 2026-11-03 (T-01 run): the router's DNS (192.168.8.1) mostly ignores random-name queries today → the healthy loop falls back to HTTP every 3 s; a second uplink en9 on the same router carries the gateway route → T-24.
+- 2026-11-03 (T-24): probes bound to the Wi-Fi interface (`IP_BOUND_IF`), resolvers from the scoped `scutil --dns` entry; `ProbeTargets` gets `interface` — a contract addition.
+- 2026-11-03 16:40 (T-24 check): the Mac rebooted into macOS 27.2 (was 26.6.2), on another network (10.250.108.0/22), en9 gone. Build, 5 tests and DNS/HTTP probes fine. Any LAN address (gateway ping, TCP 80, DNS 53) fails at once with EHOSTUNREACH, from `/sbin/ping` too. Suspect: macOS Local Network privacy for the process tree after the update — not verified. If true, the app needs Local Network permission (`NSLocalNetworkUsageDescription`) for the gateway probe → T-08/T-09.
+- 2026-11-03 (T-24, with the user): DoD changed to the en0-vs-lo0 egress test; the two-uplink capture is re-checked when back on the 192.168.8.x router.
+- 2026-11-03 (T-24 ping in the user's Terminal): the 10.250.108.1 router times out on ping (send works) → ICMP is filtered there, the gateway probe cannot tell Wi-Fi from upstream → T-25. EHOSTUNREACH in this session vs a plain timeout in Terminal points at Local Network privacy for this process tree.
+- 2026-11-03 (merge): T-03, T-04, T-07 came from the "Pipeline stage 6 parallel tasks" session (uncommitted in its worktree) and were applied here; `JsonlSink::open(dir, max_bytes)`; `Policy::set_capabilities(reassociate_allowed)`, default false until `run` (T-13) sets it. T-07's slice-run-3 replay skipped: that log was lost in the reboot.
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).
