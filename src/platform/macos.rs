@@ -2,17 +2,19 @@ use std::ffi::CString;
 use std::net::IpAddr;
 use std::num::NonZeroU32;
 use std::process::Command;
+use std::ptr;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::Sender;
-use objc2::rc::Retained;
+use objc2::rc::{Retained, autoreleasepool};
 use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
-use objc2_core_wlan::{CWInterface, CWInterfaceMode, CWWiFiClient};
-use objc2_foundation::{NSDate, NSRunLoop};
+use objc2_core_wlan::{CWInterface, CWInterfaceMode, CWKeychainDomain, CWKeychainFindWiFiPassword, CWWiFiClient};
+use objc2_foundation::{NSData, NSDate, NSRunLoop, NSString};
+use security_framework::passwords;
 
-use super::{JoinMode, PermissionState, Permissions, Secret, WifiControl};
-use crate::core::model::{LinkEvent, LinkState, NetworkId, ProbeTargets, Signal, WifiError};
+use super::{CredentialStore, JoinMode, PermissionState, Permissions, Secret, WifiControl};
+use crate::core::model::{CredError, LinkEvent, LinkState, NetworkId, ProbeTargets, Signal, WifiError};
 
 pub struct MacWifi {
     iface: Retained<CWInterface>,
@@ -85,6 +87,59 @@ impl WifiControl for MacWifi {
     }
 }
 
+const KEYCHAIN_SERVICE: &str = "dev.autoreconnect.wifi";
+const USER_CANCELED: i32 = -128;
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
+/// The app's own copy lives in the login keychain, because every System keychain read asks for an
+/// admin name and password, even after "Always Allow" (S-06 re-test).
+pub struct MacCreds;
+
+impl CredentialStore for MacCreds {
+    fn required(&self) -> bool {
+        true
+    }
+
+    fn get(&self, network: &NetworkId) -> Result<Option<Secret>, CredError> {
+        match passwords::get_generic_password(KEYCHAIN_SERVICE, &network.ssid) {
+            Ok(bytes) => String::from_utf8(bytes)
+                .map(|s| Some(Secret::new(s)))
+                .map_err(|_| CredError::Platform { code: 0, message: "stored password is not UTF-8".into() }),
+            Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
+            Err(e) => Err(cred_error(e.code(), e.message().unwrap_or_default())),
+        }
+    }
+
+    fn import_from_system(&self, network: &NetworkId) -> Result<Secret, CredError> {
+        let ssid = NSData::with_bytes(network.ssid.as_bytes());
+        autoreleasepool(|_| {
+            let mut out: *mut NSString = ptr::null_mut();
+            // Blocks until the user answers the admin prompt (7-42 s in S-06).
+            let rc = unsafe { CWKeychainFindWiFiPassword(CWKeychainDomain::System, &ssid, &mut out) };
+            // The out string is autoreleased (Swift: AutoreleasingUnsafeMutablePointer), so retain it.
+            let password = unsafe { Retained::retain(out) };
+            match (rc, password) {
+                (0, Some(p)) => Ok(Secret::new(p.to_string())),
+                (0, None) => Err(CredError::NotFound),
+                (rc, _) => Err(cred_error(rc, "CWKeychainFindWiFiPassword".into())),
+            }
+        })
+    }
+
+    fn put(&self, network: &NetworkId, secret: &Secret) -> Result<(), CredError> {
+        passwords::set_generic_password(KEYCHAIN_SERVICE, &network.ssid, secret.expose().as_bytes())
+            .map_err(|e| cred_error(e.code(), e.message().unwrap_or_default()))
+    }
+}
+
+fn cred_error(code: i32, message: String) -> CredError {
+    match code {
+        USER_CANCELED => CredError::UserDenied,
+        ERR_SEC_ITEM_NOT_FOUND => CredError::NotFound,
+        _ => CredError::Platform { code: code as i64, message },
+    }
+}
+
 pub struct MacPermissions {
     manager: Retained<CLLocationManager>,
 }
@@ -146,7 +201,7 @@ fn not_in_slice() -> WifiError {
 
 #[cfg(test)]
 mod tests {
-    use super::scoped_resolvers;
+    use super::*;
 
     // `scutil --dns` on 2026-11-03 with USB Ethernet (en9) and Wi-Fi (en0) on the same router.
     const SCUTIL: &str = "DNS configuration\n\nresolver #1\n  nameserver[0] : fe80::94:9fff:fefd:c060%en9\n  nameserver[1] : 192.168.8.1\n  if_index : 22 (en9)\n
@@ -158,5 +213,25 @@ resolver #2\n  search domain[0] : herbst-werbung.local\n  nameserver[0] : 1.1.1.
         let got = scoped_resolvers(SCUTIL, "en0");
         assert_eq!(got, ["1.1.1.1".parse::<std::net::IpAddr>().unwrap(), "1.0.0.1".parse().unwrap()]);
         assert!(scoped_resolvers(SCUTIL, "en5").is_empty());
+    }
+
+    #[test]
+    fn keychain_codes_map_to_cred_errors() {
+        assert_eq!(cred_error(-128, String::new()), CredError::UserDenied);
+        assert_eq!(cred_error(-25300, String::new()), CredError::NotFound);
+        assert!(matches!(cred_error(-25308, String::new()), CredError::Platform { code: -25308, .. }));
+    }
+
+    /// Writes a dummy item to the login keychain and removes it: `cargo test -- --ignored keychain`.
+    #[test]
+    #[ignore]
+    fn keychain_roundtrip_of_own_copy() {
+        let network = NetworkId { ssid: "autoreconnect-test-network".into() };
+        let _ = passwords::delete_generic_password(KEYCHAIN_SERVICE, &network.ssid);
+        assert!(MacCreds.get(&network).unwrap().is_none());
+        MacCreds.put(&network, &Secret::new("first".into())).unwrap();
+        MacCreds.put(&network, &Secret::new("second".into())).unwrap();
+        assert_eq!(MacCreds.get(&network).unwrap().unwrap().expose(), "second");
+        passwords::delete_generic_password(KEYCHAIN_SERVICE, &network.ssid).unwrap();
     }
 }
