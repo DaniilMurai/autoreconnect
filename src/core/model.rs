@@ -108,3 +108,11 @@ pub enum WifiError {
     Timeout,
     Platform { code: i64, message: String },
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CredError {
+    /// The user cancelled or denied the keychain prompt (macOS rc -128, S-06).
+    UserDenied,
+    NotFound,
+    Platform { code: i64, message: String },
+}

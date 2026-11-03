@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, RecvTimeoutError};
 
 use super::events::{Event, EventKind, EventSink};
-use super::model::{Health, LinkState, Observation, ProbeKind, RecoveryKind, WifiError};
+use super::model::{CredError, Health, LinkState, NetworkId, Observation, ProbeKind, RecoveryKind, WifiError};
 use super::policy::{Config, NextAction, Policy, Step};
 use crate::platform::{PermissionState, Platform};
 use crate::ui::tray::{UiCommand, UiModel};
@@ -29,6 +30,7 @@ pub fn run_core(
         link,
         targets,
         published: None,
+        credentials: HashMap::new(),
         trace: std::env::var_os("AUTORECONNECT_TRACE").is_some(),
         dry_run: std::env::var_os("AUTORECONNECT_DRY_RUN").is_some(),
     };
@@ -41,6 +43,7 @@ pub fn run_core(
     let first = Observation { at: Instant::now(), link: core.link.clone(), probe: None };
     let mut step = core.policy.on_observation(&first);
     loop {
+        core.ensure_credential();
         core.emit(&mut step);
         step = match step.next {
             NextAction::Act(kind) => core.act(kind),
@@ -48,8 +51,12 @@ pub fn run_core(
                 Some(UiCommand::Quit) => return,
                 Some(UiCommand::Pause) => core.policy.set_paused(true, Instant::now()),
                 Some(UiCommand::Resume) => core.policy.set_paused(false, Instant::now()),
-                // Handled once credentials (T-10) and the login item (T-17) exist.
-                Some(UiCommand::SetStartAtLogin(_) | UiCommand::RetryCredential) => step,
+                Some(UiCommand::RetryCredential) => {
+                    core.retry_credential();
+                    step
+                }
+                // Handled once the login item (T-17) exists.
+                Some(UiCommand::SetStartAtLogin(_)) => step,
                 None => match step.next {
                     NextAction::Probe { kind, .. } => core.probe(kind),
                     _ => core.observe_link(),
@@ -80,6 +87,8 @@ struct Core {
     link: LinkState,
     targets: super::model::ProbeTargets,
     published: Option<Health>,
+    /// Networks already looked up this run, and whether a password was found.
+    credentials: HashMap<NetworkId, bool>,
     trace: bool,
     dry_run: bool,
 }
@@ -91,6 +100,60 @@ impl Core {
         }
         if self.published != Some(step.health) {
             self.publish();
+        }
+    }
+
+    /// Once per network and run: the own copy, else one import from the System keychain.
+    /// The import blocks the loop while the admin prompt is open, so it waits out an outage (AC-6).
+    fn ensure_credential(&mut self) {
+        if !self.platform.creds.required() {
+            return;
+        }
+        let LinkState::Associated { network: Some(network), .. } = &self.link else { return };
+        if self.credentials.contains_key(network) {
+            return;
+        }
+        let network = network.clone();
+        let found = match self.platform.creds.get(&network) {
+            Ok(Some(secret)) => {
+                if self.trace {
+                    eprintln!("credential {:?}: own copy, {} bytes", network.ssid, secret.expose().len());
+                }
+                true
+            }
+            Ok(None) if self.policy.health() == Health::NoInternet => return,
+            Ok(None) => self.import_credential(&network),
+            Err(e) => {
+                self.log(self.policy.health(), EventKind::CredentialMissing { reason: reason(&e) });
+                false
+            }
+        };
+        self.credentials.insert(network, found);
+    }
+
+    fn import_credential(&mut self, network: &NetworkId) -> bool {
+        let creds = &self.platform.creds;
+        let imported = creds.import_from_system(network).and_then(|secret| creds.put(network, &secret).map(|_| secret));
+        match imported {
+            Ok(secret) => {
+                if self.trace {
+                    let same = matches!(creds.get(network), Ok(Some(s)) if s.expose() == secret.expose());
+                    eprintln!("credential {:?}: imported, own copy matches: {same}", network.ssid);
+                }
+                self.log(self.policy.health(), EventKind::CredentialImported);
+                true
+            }
+            Err(e) => {
+                self.log(self.policy.health(), EventKind::CredentialMissing { reason: reason(&e) });
+                false
+            }
+        }
+    }
+
+    /// "Retry" in the tray: the next loop turn looks the current network up again.
+    fn retry_credential(&mut self) {
+        if let LinkState::Associated { network: Some(network), .. } = &self.link {
+            self.credentials.remove(network);
         }
     }
 
@@ -183,5 +246,13 @@ impl Core {
             recent: self.sink.recent_recovery_actions(5),
             start_at_login: false,
         });
+    }
+}
+
+fn reason(e: &CredError) -> String {
+    match e {
+        CredError::UserDenied => "denied".into(),
+        CredError::NotFound => "not_found".into(),
+        CredError::Platform { code, .. } => format!("error {code}"),
     }
 }

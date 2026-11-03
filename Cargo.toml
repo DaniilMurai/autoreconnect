@@ -15,5 +15,6 @@ time = { version = "0.3.55", features = ["formatting", "parsing", "serde-well-kn
 libc = "0.2.191"
 objc2 = "0.6.5"
 objc2-core-location = { version = "0.3.2", default-features = false, features = ["CLLocationManager"] }
-objc2-core-wlan = { version = "0.3.2", features = ["CWWiFiClient", "CWInterface", "CoreWLANTypes"] }
+objc2-core-wlan = { version = "0.3.2", features = ["CWWiFiClient", "CWInterface", "CoreWLANTypes", "CoreWLANUtil"] }
 objc2-foundation = "0.3.2"
+security-framework = "3.7.0"

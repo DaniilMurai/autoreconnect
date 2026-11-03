@@ -10,7 +10,7 @@ use crate::core::events::JsonlSink;
 use crate::core::policy::Config;
 use crate::core::probe::NetProber;
 use crate::core::run::run_core;
-use crate::platform::macos::{MacPermissions, MacWifi};
+use crate::platform::macos::{MacCreds, MacPermissions, MacWifi};
 use crate::platform::{PermissionState, Permissions, Platform};
 
 fn main() {
@@ -29,7 +29,7 @@ fn main() {
         // CoreWLAN objects are not Send, so the platform is built on the thread that uses it.
         let wifi = MacWifi::new().expect("no Wi-Fi interface");
         let prober = prober(&cfg);
-        let platform = Platform { wifi: Box::new(wifi), prober: Box::new(prober) };
+        let platform = Platform { wifi: Box::new(wifi), creds: Box::new(MacCreds), prober: Box::new(prober) };
         let publish = Box::new(|_| {});
         run_core(platform, cfg, Box::new(sink), location, commands, publish);
     });
