@@ -9,7 +9,7 @@
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
 - Children (2026-11-03): T-08 merged. T-05 `local_2dc3e38c-1bb0-48ad-a962-cda6559e836f` (t05-degraded) is
   needs-user: the AC-14 detection DoD (≤ 30 s at 40 % loss) fails in ~21 % of seeded runs — case: contract;
-  waits for the user's choice (pass-rate DoD / change numbers / wait for the live pf run). T-06 after T-05.
+  user chose a pass-rate DoD (tasks.md updated); the child is reworking. T-06 after T-05.
 - Updated: 2026-11-03
 
 ## Gates
@@ -66,4 +66,5 @@
 - 2026-11-03 (merge): T-03, T-04, T-07 came from the "Pipeline stage 6 parallel tasks" session (uncommitted in its worktree) and were applied here; `JsonlSink::open(dir, max_bytes)`; `Policy::set_capabilities(reassociate_allowed)`, default false until `run` (T-13) sets it. T-07's slice-run-3 replay skipped: that log was lost in the reboot.
 - 2026-11-03 (S-09/T-25): gateway probe = ICMP echo + DNS `version.bind CH TXT` sent together, any reply = router alive; Local Network privacy theory refuted (EHOSTUNREACH was transient after the reboot). End-to-end: internet-only block → `upstream_down`, no action.
 - 2026-11-03 (T-08): launch the bundle with `open --env AUTORECONNECT_DRY_RUN=1`; a bare `open` drops shell env. Dry run is visible only in the process env (`ps eww`), not in events.jsonl.
+- 2026-11-03 (T-05, user): Degraded detection is statistical (window 6/3 at 40 % loss: ~11 % late by chance alone) → DoD is a pass rate over seeded runs; the live AC-14 pf run is the real check.
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).

@@ -85,8 +85,9 @@ run by the user in their own terminal (brief.md, "How to run")._
       Do: sliding window of `degraded_window` probes, bad = failed or rtt ≥ `slow_rtt`; ≥ `degraded_min_bad`
           and not lost → Degraded + `connection_degraded {failed, slow, window}`; Reassociate, PowerCycle after
           `degraded_power_cycle_after`, then backoff; back to Healthy logs `connectivity_restored`.
-      DoD: unit tests: 40 % random loss for 3 simulated minutes → `connection_degraded` ≤ 30 s, ≤ 2 actions,
-           first Reassociate; isolated slow probes on healthy Wi-Fi do not trigger it; T-04 tests still green.
+      DoD: unit tests over 500 seeded runs of 40 % per-probe loss for 3 simulated minutes: ≥ 75 % log
+           `connection_degraded` ≤ 30 s, ≥ 99 % take ≤ 2 actions, 100 % start with Reassociate (a pass rate, not
+           every run: user, 2026-11-03); isolated slow probes on healthy Wi-Fi do not trigger it; T-04 tests green.
       Executor: main loop
       Depends on: T-04
 
