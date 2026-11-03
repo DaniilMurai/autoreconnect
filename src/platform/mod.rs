@@ -53,3 +53,10 @@ pub enum PermissionState {
     Denied,
     NotApplicable,
 }
+
+/// Runs on the main thread before the core starts; the core gets the result, not the object.
+pub trait Permissions {
+    fn location(&self) -> PermissionState;
+    /// Shows the system prompt once; the answer arrives on the main run loop.
+    fn request_location(&self);
+}
