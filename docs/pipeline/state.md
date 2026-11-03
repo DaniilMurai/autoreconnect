@@ -3,6 +3,10 @@
 - Project: AutoReconnect (working name)
 - Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-07, T-24, T-25 done 2026-11-03)
 - Next: T-05 Degraded state
+- Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
+- Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
+  network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
+  `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
 - Updated: 2026-11-03
 
 ## Gates
