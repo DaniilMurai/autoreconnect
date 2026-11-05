@@ -16,6 +16,7 @@ pub struct Config {
     pub gateway_timeout: Duration,
     pub upstream_probe_interval: Duration,
     pub settle_after_power_cycle: Duration,
+    pub settle_after_association: Duration,
     pub degraded_window: u8,
     pub degraded_min_bad: u8,
     pub slow_rtt: Duration,
@@ -53,6 +54,8 @@ impl Default for Config {
             gateway_timeout: s(1),
             upstream_probe_interval: s(5),
             settle_after_power_cycle: s(10),
+            // DNS answered `Refused` for ~3 s after the OS rejoined, before the route was up (T-12 live run).
+            settle_after_association: s(5),
             degraded_window: 6,
             degraded_min_bad: 3,
             slow_rtt: Duration::from_millis(1500),
@@ -105,6 +108,7 @@ pub struct Policy {
     degraded_episode: bool,
     own_power_cycle_until: Option<Instant>,
     settle_until: Option<Instant>,
+    association_settle_until: Option<Instant>,
     /// Rejoins tried since the link dropped and when the last one ended; they pace `rejoin_backoff`.
     rejoins: usize,
     last_rejoin_at: Option<Instant>,
@@ -128,6 +132,7 @@ impl Policy {
             degraded_episode: false,
             own_power_cycle_until: None,
             settle_until: None,
+            association_settle_until: None,
             rejoins: 0,
             last_rejoin_at: None,
         }
@@ -160,10 +165,13 @@ impl Policy {
             LinkState::Disassociated => return self.not_associated(obs.at, events),
             LinkState::Associated { .. } => {}
         }
-        if self.health == Health::NotAssociated {
-            self.health = Health::Unknown;
+        if matches!(self.health, Health::NotAssociated | Health::WifiOffByUser) {
+            self.association_settle_until = Some(obs.at + self.cfg.settle_after_association);
             self.rejoins = 0;
             self.last_rejoin_at = None;
+        }
+        if self.health == Health::NotAssociated {
+            self.health = Health::Unknown;
         }
         if self.health == Health::WifiOffByUser {
             events.push(EventKind::WifiOnByUser);
@@ -175,7 +183,11 @@ impl Policy {
 
         // Probes fail for a while after our own power-cycle; counting them misread the pf test as UpstreamDown.
         let settling = self.settle_until.is_some_and(|t| obs.at < t);
-        if probe.outcome == ProbeOutcome::NotReady || (settling && (probe.kind == ProbeKind::Gateway || probe.outcome != ProbeOutcome::Ok)) {
+        let joining = self.association_settle_until.is_some_and(|t| obs.at < t);
+        if probe.outcome == ProbeOutcome::NotReady
+            || (joining && probe.outcome == ProbeOutcome::Refused)
+            || (settling && (probe.kind == ProbeKind::Gateway || probe.outcome != ProbeOutcome::Ok))
+        {
             return self.step(events, NextAction::Probe { kind: ProbeKind::Http, after: self.cfg.suspect_probe_interval });
         }
         let ok = probe.outcome == ProbeOutcome::Ok;
@@ -307,7 +319,14 @@ impl Policy {
         if self.own_power_cycle_until.is_some_and(|t| at < t) {
             return self.idle(events);
         }
-        if self.health != Health::NotAssociated {
+        // The OS joins after the user's power-on; nothing was lost, so nothing is restored later either.
+        if self.health == Health::WifiOffByUser {
+            self.health = Health::NotAssociated;
+            self.failures = 0;
+            self.rejoins = 0;
+            self.last_rejoin_at = None;
+            events.push(EventKind::WifiOnByUser);
+        } else if self.health != Health::NotAssociated {
             self.health = Health::NotAssociated;
             self.lost_at.get_or_insert(at);
             self.failures = 0;
@@ -805,5 +824,66 @@ mod tests {
         // Failures counted while paused would have sent this first failure straight to the gateway.
         let after = p.on_observation(&obs(t + Duration::from_secs(2), ProbeKind::Dns, ProbeOutcome::Timeout));
         assert!(matches!(after.next, NextAction::Probe { kind: ProbeKind::Http, .. }), "{:?}", after.next);
+    }
+
+    #[test]
+    fn power_on_after_user_off_logs_wifi_on_and_no_outage() {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        let off = p.on_observation(&link_only(t0 + Duration::from_secs(1), LinkState::PoweredOff));
+        assert_eq!(off.events, vec![EventKind::WifiOffByUser]);
+        let on = p.on_observation(&link_only(t0 + Duration::from_secs(60), LinkState::Disassociated));
+        assert_eq!((on.health, on.events), (Health::NotAssociated, vec![EventKind::WifiOnByUser]));
+        let still = p.on_observation(&link_only(t0 + Duration::from_secs(61), LinkState::Disassociated));
+        assert!(still.events.is_empty(), "{:?}", still.events);
+        let up = p.on_observation(&obs(t0 + Duration::from_secs(63), ProbeKind::Dns, ProbeOutcome::Ok));
+        assert_eq!(up.health, Health::Healthy);
+        assert!(up.events.is_empty(), "{:?}", up.events);
+    }
+
+    /// Joins after `before` and feeds `refused_for` of `Refused` probes, then good ones, as the core loop would.
+    fn refused_after_join(before: LinkState, refused_for: Duration) -> Vec<Step> {
+        let mut p = Policy::new(Config::default());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        p.on_observation(&obs(t0, ProbeKind::Dns, ProbeOutcome::Ok));
+        p.on_observation(&link_only(t0 + Duration::from_secs(1), before));
+        let joined = t0 + Duration::from_secs(2);
+        let (mut t, mut kind) = (joined, ProbeKind::Dns);
+        let mut steps = Vec::new();
+        while t < joined + refused_for + Duration::from_secs(10) {
+            let outcome = if t < joined + refused_for { ProbeOutcome::Refused } else { ProbeOutcome::Ok };
+            let step = p.on_observation(&obs(t, kind, outcome));
+            let next = step.next.clone();
+            steps.push(step);
+            match next {
+                NextAction::Probe { kind: k, after } => {
+                    kind = k;
+                    t += after.max(Duration::from_millis(50));
+                }
+                _ => break,
+            }
+        }
+        steps
+    }
+
+    #[test]
+    fn refused_right_after_association_is_not_counted() {
+        for before in [LinkState::Disassociated, LinkState::PoweredOff] {
+            let steps = refused_after_join(before.clone(), Duration::from_secs(3));
+            for step in &steps {
+                assert!(!matches!(step.next, NextAction::Act(_)), "{before:?}: {step:?}");
+                assert!(!step.events.iter().any(|e| matches!(e, EventKind::ConnectionDegraded { .. })), "{before:?}: {step:?}");
+            }
+            assert_eq!(steps.last().unwrap().health, Health::Healthy, "{before:?}");
+        }
+    }
+
+    #[test]
+    fn refused_past_the_association_settle_still_counts() {
+        let steps = refused_after_join(LinkState::Disassociated, Duration::from_secs(20));
+        assert!(steps.iter().any(|s| matches!(s.next, NextAction::Probe { kind: ProbeKind::Gateway, .. })));
     }
 }
