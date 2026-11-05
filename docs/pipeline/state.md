@@ -1,15 +1,15 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03; T-12, T-26 done 2026-11-06)
-- Next: T-11 Join and remember (CoreWLAN, live run needs the user); then T-13 once T-11 is in
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03; T-11, T-12, T-26 done 2026-11-06)
+- Next: T-13 Wire Rejoin/Reassociate into `run` (ready; live AC-4b/AC-2 need the user)
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
 - Children (2026-11-03): T-05, T-06, T-08, T-09, T-10 merged; none running.
 - Remote (2026-11-03): private https://github.com/DaniilMurai/autoreconnect, `main` = orchestrator branch through T-10. Cloud sessions run Linux: only platform-free work (policy, tools, Windows CI), never CoreWLAN/keychain/live runs.
-- Children (2026-11-06): T-12 (local_9af0c157-b4ca-48ea-85ea-b1352bf83298) and T-26 (local_f198b3b4-df49-4125-b72a-16a26c8f81e3) merged; none running.
+- Children (2026-11-06): T-12 (local_9af0c157-b4ca-48ea-85ea-b1352bf83298) T-26 (local_f198b3b4-df49-4125-b72a-16a26c8f81e3) and T-11 (local_f48fabee-ef76-4f1f-935a-e5d866e9c5f1) merged; none running.
 - Updated: 2026-11-06
 
 ## Gates
@@ -73,3 +73,4 @@
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).
 - 2026-11-06 (T-12): CoreWLAN delivers events to the ad-hoc bundle (event→log ≤ 40 ms); 1 s link poll kept as fallback. Power-on after user-off logged a false `connectivity_lost` and DNS `Refused` for ~3 s after rejoin triggered a (dry-run) power_cycle → T-26, before T-14.
 - 2026-11-06 (T-26): fresh association = Associated while NotAssociated/WifiOffByUser; `settle_after_association` 5 s skips only `Refused` (timeouts still count); power-on after user-off logs `wifi_on_by_user`. Contracts updated.
+- 2026-11-06 (T-11): rejoin after CoreWLAN `disassociate()` via own `associate` = 2.3 s from the cached BSS, 3.6 s with a fresh scan (network "lutix"); a failed join drops the cached object; first-seen network needs the credential import before Rejoin (→ T-13 Do line).

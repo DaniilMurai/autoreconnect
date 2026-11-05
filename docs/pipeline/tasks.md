@@ -144,7 +144,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-09
 
-- [ ] T-11 — Join and remember (CoreWLAN)
+- [x] T-11 — Join and remember (CoreWLAN)
       Files: src/platform/macos.rs
       Do: `remember_current` keeps the `CWNetwork` from the last scan / current association; `join(FromCache)`
           = `associate(to:password:)` without a scan, falls back to one scan when the cached object is missing;
@@ -170,6 +170,8 @@ run by the user in their own terminal (brief.md, "How to run")._
       Do: execute `Act(Rejoin)` / `Act(Reassociate)` with `remember_current` + creds, the error table from
           contracts (-3900 with a stored password → drop the own copy; `NeedsLocation` → `permission_missing`
           once); tell `Policy` what is allowed (T-04 input).
+          A network seen for the first time has no own password copy → import it (T-10) before the first Rejoin;
+          Rejoin prefers `FromCache` (T-11: 2.3 s vs 3.6 s fresh scan). A supervised live check can reuse `--join-test`.
       DoD: live AC-4b: associated + online ≤ 10 s after `disassociate()`, `recovery_action {kind: rejoin}`,
            `connectivity_restored` ≤ 12 s (`tools/check_log.py ac4b` PASS); live AC-2: first action is
            `reassociate` (`check_log.py ac2` PASS).
