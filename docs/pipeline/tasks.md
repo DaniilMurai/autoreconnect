@@ -176,7 +176,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-05, T-06, T-07, T-11, T-12
 
-- [ ] T-26 — Policy: Wi-Fi back on, and settle after a fresh association
+- [x] T-26 — Policy: Wi-Fi back on, and settle after a fresh association
       Files: src/core/policy.rs
       Do: PoweredOff/WifiOffByUser → Disassociated logs `wifi_on_by_user` and goes NotAssociated without
           `connectivity_lost`; after a fresh association, `Refused`/`NotReady` probes are not counted for a short

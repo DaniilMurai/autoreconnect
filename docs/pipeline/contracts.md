@@ -389,6 +389,8 @@ pub fn run_core(
 | ≥ `degraded_min_bad` failed/slow in the last `degraded_window` probes, not lost | → Degraded, log `connection_degraded` | Reassociate, then PowerCycle after `degraded_power_cycle_after`, then backoff, never less than `degraded_power_cycle_after` apart (≤ 2 actions in 3 min, AC-14) |
 | Link drops to Disassociated (OS event or poll) | link every `link_poll_interval` | Rejoin at once (`FromCache`), retries on `rejoin_backoff`; **never PowerCycle while not associated** (S-07: the AP may just be away) |
 | PoweredOff, not by us | → WifiOffByUser, log it | none until powered on (AC-5) |
+| Powered on after WifiOffByUser (first link Disassociated) | → NotAssociated, log `wifi_on_by_user`; no `connectivity_lost`, no `connectivity_restored` later | as Disassociated (T-26) |
+| `Refused` probes within `settle_after_association` of a fresh association | not counted; timeouts still count | none (T-26) |
 | PoweredOff or Disassociated within `own_power_cycle_window` after our PowerCycle | stays in the current state, no event, no Rejoin | power back on and the OS auto-join are part of PowerCycle |
 | Paused | link only, for the tray | none (AC-7) |
 | No credential for the network (macOS) | as usual | Rejoin/Reassociate skipped, `credential_missing` logged once per network; PowerCycle still allowed |
@@ -414,6 +416,7 @@ pub struct Config {
     pub gateway_timeout: Duration,            // 1 s (LAN; 2–149 ms seen)
     pub upstream_probe_interval: Duration,    // 5 s
     pub settle_after_power_cycle: Duration,   // 10 s: failed probes right after our power-cycle are not counted (slice pf run)
+    pub settle_after_association: Duration,   // 5 s: Refused probes right after a fresh association are not counted (T-12 live run: ~3 s)
     pub degraded_window: u8,                  // 6 probes
     pub degraded_min_bad: u8,                 // 3
     pub slow_rtt: Duration,                   // 1500 ms
