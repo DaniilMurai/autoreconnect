@@ -12,9 +12,10 @@ use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, define_class, msg_send};
 use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
 use objc2_core_wlan::{
-    CWEventDelegate, CWEventType, CWInterface, CWInterfaceMode, CWKeychainDomain, CWKeychainFindWiFiPassword, CWWiFiClient,
+    CWEventDelegate, CWEventType, CWInterface, CWInterfaceMode, CWKeychainDomain, CWKeychainFindWiFiPassword, CWNetwork,
+    CWWiFiClient,
 };
-use objc2_foundation::{NSData, NSDate, NSRunLoop, NSString};
+use objc2_foundation::{NSData, NSDate, NSError, NSRunLoop, NSString};
 use security_framework::passwords;
 
 use super::{CredentialStore, JoinMode, PermissionState, Permissions, Secret, WifiControl};
@@ -25,14 +26,53 @@ pub struct MacWifi {
     iface: Retained<CWInterface>,
     /// The client holds its delegate weakly.
     forwarder: Option<Retained<EventForwarder>>,
+    /// Lets `join(FromCache)` skip the scan, which took 2.4–5.3 s of AC-4b's budget (S-06).
+    remembered: Option<Retained<CWNetwork>>,
 }
 
 impl MacWifi {
     pub fn new() -> Result<Self, WifiError> {
         let client = unsafe { CWWiFiClient::sharedWiFiClient() };
         let iface = unsafe { client.interface() }.ok_or(WifiError::NoInterface)?;
-        Ok(Self { client, iface, forwarder: None })
+        Ok(Self { client, iface, forwarder: None, remembered: None })
     }
+
+    /// The best BSS of `ssid` among `networks`: `bssid` if it is there, else the strongest.
+    fn pick(networks: Vec<Retained<CWNetwork>>, ssid: &str, bssid: Option<&str>) -> Option<Retained<CWNetwork>> {
+        let seen: Vec<Bss> = networks
+            .iter()
+            .map(|n| unsafe {
+                Bss {
+                    ssid: n.ssid().map(|s| s.to_string()),
+                    bssid: n.bssid().map(|s| s.to_string()),
+                    rssi: n.rssiValue() as i64,
+                }
+            })
+            .collect();
+        choose(&seen, ssid, bssid).map(|i| networks[i].clone())
+    }
+
+    fn scan(&self, ssid: &str) -> Result<Vec<Retained<CWNetwork>>, WifiError> {
+        let name = NSString::from_str(ssid);
+        let found = unsafe { self.iface.scanForNetworksWithName_error(Some(&name)) }.map_err(|e| platform_error(&e))?;
+        Ok(found.to_vec())
+    }
+}
+
+struct Bss {
+    ssid: Option<String>,
+    bssid: Option<String>,
+    rssi: i64,
+}
+
+fn choose(seen: &[Bss], ssid: &str, bssid: Option<&str>) -> Option<usize> {
+    let same: Vec<usize> = (0..seen.len()).filter(|&i| seen[i].ssid.as_deref() == Some(ssid)).collect();
+    let exact = bssid.and_then(|b| same.iter().copied().find(|&i| seen[i].bssid.as_deref() == Some(b)));
+    exact.or_else(|| same.into_iter().max_by_key(|&i| seen[i].rssi))
+}
+
+fn platform_error(e: &NSError) -> WifiError {
+    WifiError::Platform { code: e.code() as i64, message: e.localizedDescription().to_string() }
 }
 
 define_class!(
@@ -98,18 +138,43 @@ impl WifiControl for MacWifi {
     }
 
     fn remember_current(&mut self) -> Result<Option<NetworkId>, WifiError> {
-        Err(not_in_slice())
+        let LinkState::Associated { network, bssid, .. } = self.link()? else { return Ok(None) };
+        let network = network.ok_or(WifiError::NeedsLocation)?;
+        let bssid = bssid.as_deref();
+        let fresh = self.remembered.as_ref().is_some_and(|n| unsafe {
+            n.ssid().is_some_and(|s| s.to_string() == network.ssid) && n.bssid().map(|b| b.to_string()).as_deref() == bssid
+        });
+        if fresh {
+            return Ok(Some(network));
+        }
+        let cached = unsafe { self.iface.cachedScanResults() }.map(|s| s.to_vec()).unwrap_or_default();
+        self.remembered = match Self::pick(cached, &network.ssid, bssid) {
+            Some(n) => Some(n),
+            // Scanning while associated costs time, not the link; once per network/BSS change.
+            None => Self::pick(self.scan(&network.ssid)?, &network.ssid, bssid),
+        };
+        Ok(Some(network))
     }
 
-    fn join(&mut self, _: &NetworkId, _: JoinMode, _: Option<&Secret>) -> Result<(), WifiError> {
-        Err(not_in_slice())
+    fn join(&mut self, network: &NetworkId, mode: JoinMode, password: Option<&Secret>) -> Result<(), WifiError> {
+        // Taken out, so a failed associate drops a possibly stale BSS and the next FromCache scans.
+        let cached = match mode {
+            JoinMode::FromCache => self.remembered.take().filter(|n| unsafe { n.ssid() }.is_some_and(|s| s.to_string() == network.ssid)),
+            JoinMode::FreshScanStrongest => None,
+        };
+        let target = match cached {
+            Some(n) => n,
+            None => Self::pick(self.scan(&network.ssid)?, &network.ssid, None).ok_or(WifiError::NotInRange)?,
+        };
+        let password = password.map(|p| NSString::from_str(p.expose()));
+        unsafe { self.iface.associateToNetwork_password_error(&target, password.as_deref()) }
+            .map_err(|e| join_error(e.code() as i64))?;
+        self.remembered = Some(target);
+        Ok(())
     }
 
     fn set_power(&self, on: bool) -> Result<(), WifiError> {
-        unsafe { self.iface.setPower_error(on) }.map_err(|e| WifiError::Platform {
-            code: e.code() as i64,
-            message: e.localizedDescription().to_string(),
-        })
+        unsafe { self.iface.setPower_error(on) }.map_err(|e| platform_error(&e))
     }
 
     fn subscribe(&mut self, events: Sender<LinkEvent>) -> Result<(), WifiError> {
@@ -118,10 +183,7 @@ impl WifiControl for MacWifi {
         self.forwarder = Some(forwarder);
         let kinds = [CWEventType::PowerDidChange, CWEventType::LinkDidChange, CWEventType::SSIDDidChange, CWEventType::BSSIDDidChange];
         for kind in kinds {
-            unsafe { self.client.startMonitoringEventWithType_error(kind) }.map_err(|e| WifiError::Platform {
-                code: e.code() as i64,
-                message: e.localizedDescription().to_string(),
-            })?;
+            unsafe { self.client.startMonitoringEventWithType_error(kind) }.map_err(|e| platform_error(&e))?;
         }
         Ok(())
     }
@@ -252,8 +314,71 @@ fn scoped_resolvers(scutil: &str, iface: &str) -> Vec<IpAddr> {
         .unwrap_or_default()
 }
 
-fn not_in_slice() -> WifiError {
-    WifiError::Platform { code: 0, message: "not implemented yet".into() }
+/// Every associate refusal is the OS's; -3900 (no or wrong password, S-01/S-06) is the common one.
+fn join_error(code: i64) -> WifiError {
+    WifiError::JoinFailed { code }
+}
+
+/// T-11 DoD, network-breaking: disassociate, rejoin via `join`, give up at 60 s offline and power-cycle
+/// once. Only in builds with debug assertions (`CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true`).
+#[cfg(debug_assertions)]
+pub fn join_test(mode: JoinMode, check_only: bool) -> Result<(), String> {
+    const OFFLINE_CAP: Duration = Duration::from_secs(60);
+    let mut wifi = MacWifi::new().map_err(|e| format!("{e:?}"))?;
+    let name = unsafe { wifi.iface.interfaceName() }.map(|n| n.to_string()).ok_or("no interface name")?;
+    let network = wifi.remember_current().map_err(|e| format!("remember_current: {e:?}"))?.ok_or("not associated")?;
+    println!("before: ssid={:?} cached_bss={} online={}", network.ssid, wifi.remembered.is_some(), online(&name));
+    if !online(&name) {
+        return Err(format!("not online on {name} before the test; nothing was changed"));
+    }
+    // Any keychain prompt has to be answered now, while the network still works.
+    let password = match MacCreds.get(&network).map_err(|e| format!("password: {e:?}"))? {
+        Some(p) => p,
+        None => {
+            println!("no own copy for {:?}: importing from the System keychain (admin prompt)", network.ssid);
+            let p = MacCreds.import_from_system(&network).map_err(|e| format!("import: {e:?}"))?;
+            MacCreds.put(&network, &p).map_err(|e| format!("put: {e:?}"))?;
+            p
+        }
+    };
+    if check_only {
+        println!("password: found; check only, network untouched");
+        return Ok(());
+    }
+    println!("password: found; mode={mode:?}; disassociating now");
+
+    unsafe { wifi.iface.disassociate() };
+    let drop = Instant::now();
+    let joined = wifi.join(&network, mode, Some(&password));
+    println!("{:5.1}s join -> {joined:?}", drop.elapsed().as_secs_f64());
+    while joined.is_ok() && drop.elapsed() < OFFLINE_CAP {
+        if online(&name) {
+            println!("{:5.1}s ONLINE on {name} (drop -> online)", drop.elapsed().as_secs_f64());
+            return Ok(());
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    println!("{:5.1}s recovery failed; fallback: Wi-Fi power off/on once", drop.elapsed().as_secs_f64());
+    let script = format!("networksetup -setairportpower {name} off; sleep 2; networksetup -setairportpower {name} on");
+    let _ = Command::new("/bin/sh").args(["-c", &script]).status();
+    let after = Instant::now();
+    while after.elapsed() < Duration::from_secs(30) {
+        if online(&name) {
+            return Err(format!("join failed; online again {:.1}s after the fallback", after.elapsed().as_secs_f64()));
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+    Err(format!("join failed and still OFFLINE after the fallback: rejoin {:?} by hand in the Wi-Fi menu", network.ssid))
+}
+
+/// Pinned to the Wi-Fi interface: a second uplink made unpinned checks lie in S-06.
+#[cfg(debug_assertions)]
+fn online(iface: &str) -> bool {
+    let out = Command::new("/usr/bin/curl")
+        .args(["--interface", iface, "-s", "-m", "2", "http://captive.apple.com/hotspot-detect.html"])
+        .output();
+    out.is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("Success"))
 }
 
 #[cfg(test)]
@@ -270,6 +395,24 @@ resolver #2\n  search domain[0] : herbst-werbung.local\n  nameserver[0] : 1.1.1.
         let got = scoped_resolvers(SCUTIL, "en0");
         assert_eq!(got, ["1.1.1.1".parse::<std::net::IpAddr>().unwrap(), "1.0.0.1".parse().unwrap()]);
         assert!(scoped_resolvers(SCUTIL, "en5").is_empty());
+    }
+
+    fn bss(ssid: &str, bssid: &str, rssi: i64) -> Bss {
+        Bss { ssid: Some(ssid.into()), bssid: Some(bssid.into()), rssi }
+    }
+
+    #[test]
+    fn picks_the_current_bss_else_the_strongest_of_the_same_ssid() {
+        let seen = [bss("Home", "aa", -70), bss("Other", "cc", -30), bss("Home", "bb", -50), Bss { ssid: None, bssid: None, rssi: -20 }];
+        assert_eq!(choose(&seen, "Home", Some("aa")), Some(0));
+        assert_eq!(choose(&seen, "Home", Some("zz")), Some(2));
+        assert_eq!(choose(&seen, "Home", None), Some(2));
+        assert_eq!(choose(&seen, "Gone", None), None);
+    }
+
+    #[test]
+    fn associate_refusal_maps_to_join_failed() {
+        assert_eq!(join_error(-3900), WifiError::JoinFailed { code: -3900 });
     }
 
     #[test]

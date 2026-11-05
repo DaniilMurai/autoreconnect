@@ -19,6 +19,19 @@ fn main() {
         eprintln!("{e}");
         std::process::exit(1);
     });
+    #[cfg(debug_assertions)]
+    if let Some(i) = std::env::args().position(|a| a == "--join-test") {
+        let arg = std::env::args().nth(i + 1);
+        let fresh = arg.as_deref() == Some("fresh");
+        let mode = if fresh { platform::JoinMode::FreshScanStrongest } else { platform::JoinMode::FromCache };
+        if location() != PermissionState::Granted {
+            eprintln!("join test: Location not granted; nothing was changed");
+            std::process::exit(2);
+        }
+        let result = platform::macos::join_test(mode, arg.as_deref() == Some("check"));
+        println!("join test: {result:?}");
+        std::process::exit(if result.is_ok() { 0 } else { 1 });
+    }
     let sink = JsonlSink::open(&cfg.log_dir, cfg.log_max_bytes).expect("cannot open the event log");
     println!("event log: {}", sink.path().display());
     // Kept alive so the core sees a connected channel; the tray (T-16) becomes its owner.
