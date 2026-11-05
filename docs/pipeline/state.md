@@ -1,15 +1,16 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03)
-- Next: T-11 Join and remember (CoreWLAN); every open task needs the user
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03; T-12 done 2026-11-06)
+- Next: T-11 Join and remember (CoreWLAN, live run needs the user); T-26 (policy, no user needed) is ready
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
 - Children (2026-11-03): T-05, T-06, T-08, T-09, T-10 merged; none running.
 - Remote (2026-11-03): private https://github.com/DaniilMurai/autoreconnect, `main` = orchestrator branch through T-10. Cloud sessions run Linux: only platform-free work (policy, tools, Windows CI), never CoreWLAN/keychain/live runs.
-- Updated: 2026-11-03
+- Children (2026-11-06): T-12 merged (session local_9af0c157-b4ca-48ea-85ea-b1352bf83298); none running.
+- Updated: 2026-11-06
 
 ## Gates
 
@@ -70,3 +71,4 @@
 - 2026-11-03 (T-09): `tccutil reset Location <bundle id>` does not reset on macOS 27.2; a re-signed bundle (new cdhash) prompts again. Until T-16, `main` polls Location for up to 60 s before starting the core; an unanswered prompt = no SSID, no `permission_missing`.
 - 2026-11-03 (T-10): the own keychain item's ACL trusts the creating build's cdhash → after each rebuild `get` asks once for the login password, then "Always Allow" sticks; not the stage-2 case. Each update to the friend = Location + one login-keychain prompt; a stable signing identity would remove both. Open proposals: contracts `CredentialStore::get` wording; T-13 sets capabilities from the per-network credential map.
 - 2026-11-03 (slice): non-fault-injection runs use AUTORECONNECT_DRY_RUN; the app needs a single-instance guard (two instances mistake each other's power-cycle for the user).
+- 2026-11-06 (T-12): CoreWLAN delivers events to the ad-hoc bundle (event→log ≤ 40 ms); 1 s link poll kept as fallback. Power-on after user-off logged a false `connectivity_lost` and DNS `Refused` for ~3 s after rejoin triggered a (dry-run) power_cycle → T-26, before T-14.

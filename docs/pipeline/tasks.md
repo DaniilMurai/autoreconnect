@@ -156,7 +156,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-10
 
-- [ ] T-12 — OS Wi-Fi events
+- [x] T-12 — OS Wi-Fi events
       Files: src/platform/macos.rs, src/core/run.rs
       Do: `subscribe` via CoreWLAN event monitoring (link, SSID, power) → `LinkEvent`; `run` waits on
           `crossbeam select` of the event channel, the UI commands and the timer, so an event cuts any sleep short.
@@ -176,6 +176,16 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-05, T-06, T-07, T-11, T-12
 
+- [ ] T-26 — Policy: Wi-Fi back on, and settle after a fresh association
+      Files: src/core/policy.rs
+      Do: PoweredOff/WifiOffByUser → Disassociated logs `wifi_on_by_user` and goes NotAssociated without
+          `connectivity_lost`; after a fresh association, `Refused`/`NotReady` probes are not counted for a short
+          settle (like `settle_after_power_cycle`). Found in T-12's live run (reports/T-12.md).
+      DoD: policy tests: power on after user-off → `wifi_on_by_user`, no `connectivity_lost`; 3 s of `Refused`
+           right after association → no `connection_degraded`, no `recovery_action`.
+      Executor: main loop
+      Depends on: T-12
+
 - [ ] T-14 — macOS AC runs: detection and recovery
       Files: docs/pipeline/runs/macos-<date>.md (new; logs next to it)
       Do: user runs the pf blocks; record AC-2 (`drop` and `return`), AC-3 (30 min), AC-4b (3 runs), AC-5,
@@ -183,7 +193,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       DoD: every AC above has PASS from `check_log.py` (or the stated command for AC-1/AC-6) with numbers in the
            runs file; any FAIL becomes a new task here, not an inline fix.
       Executor: main loop (user runs sudo)
-      Depends on: T-03, T-13
+      Depends on: T-03, T-13, T-26
 
 - [ ] T-15 — AC-4a router run
       Files: docs/pipeline/runs/macos-<date>.md
