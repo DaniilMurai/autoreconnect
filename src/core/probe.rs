@@ -168,10 +168,14 @@ fn send_chaos(gw: Ipv4Addr, iface: Option<NonZeroU32>) -> std::io::Result<(UdpSo
 /// A socket bound to `iface` (`IP_BOUND_IF` on macOS), so it leaves through Wi-Fi whatever the routing table says.
 fn bound_socket(peer: &IpAddr, ty: Type, proto: Protocol, iface: Option<NonZeroU32>) -> std::io::Result<Socket> {
     let sock = Socket::new(Domain::for_address(SocketAddr::new(*peer, 0)), ty, Some(proto))?;
+    // socket2 has no interface binding on Windows; T-20 picks the mechanism (IP_UNICAST_IF or a source address).
+    #[cfg(target_os = "macos")]
     match peer {
         IpAddr::V4(_) => sock.bind_device_by_index_v4(iface)?,
         IpAddr::V6(_) => sock.bind_device_by_index_v6(iface)?,
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = iface;
     Ok(sock)
 }
 
