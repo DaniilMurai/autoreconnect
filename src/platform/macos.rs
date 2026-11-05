@@ -8,8 +8,12 @@ use std::time::{Duration, Instant};
 
 use crossbeam_channel::Sender;
 use objc2::rc::{Retained, autoreleasepool};
+use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
+use objc2::{AnyThread, DefinedClass, define_class, msg_send};
 use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
-use objc2_core_wlan::{CWInterface, CWInterfaceMode, CWKeychainDomain, CWKeychainFindWiFiPassword, CWWiFiClient};
+use objc2_core_wlan::{
+    CWEventDelegate, CWEventType, CWInterface, CWInterfaceMode, CWKeychainDomain, CWKeychainFindWiFiPassword, CWWiFiClient,
+};
 use objc2_foundation::{NSData, NSDate, NSRunLoop, NSString};
 use security_framework::passwords;
 
@@ -17,13 +21,56 @@ use super::{CredentialStore, JoinMode, PermissionState, Permissions, Secret, Wif
 use crate::core::model::{CredError, LinkEvent, LinkState, NetworkId, ProbeTargets, Signal, WifiError};
 
 pub struct MacWifi {
+    client: Retained<CWWiFiClient>,
     iface: Retained<CWInterface>,
+    /// The client holds its delegate weakly.
+    forwarder: Option<Retained<EventForwarder>>,
 }
 
 impl MacWifi {
     pub fn new() -> Result<Self, WifiError> {
-        let iface = unsafe { CWWiFiClient::sharedWiFiClient().interface() }.ok_or(WifiError::NoInterface)?;
-        Ok(Self { iface })
+        let client = unsafe { CWWiFiClient::sharedWiFiClient() };
+        let iface = unsafe { client.interface() }.ok_or(WifiError::NoInterface)?;
+        Ok(Self { client, iface, forwarder: None })
+    }
+}
+
+define_class!(
+    // CoreWLAN calls the delegate on its own dispatch queue, so the core thread needs no run loop.
+    #[unsafe(super(NSObject))]
+    #[name = "AutoReconnectEventForwarder"]
+    #[ivars = Sender<LinkEvent>]
+    struct EventForwarder;
+
+    unsafe impl NSObjectProtocol for EventForwarder {}
+
+    unsafe impl CWEventDelegate for EventForwarder {
+        #[unsafe(method(powerStateDidChangeForWiFiInterfaceWithName:))]
+        fn power_changed(&self, _: &NSString) {
+            let _ = self.ivars().send(LinkEvent::PowerChanged);
+        }
+
+        #[unsafe(method(linkDidChangeForWiFiInterfaceWithName:))]
+        fn link_changed(&self, _: &NSString) {
+            let _ = self.ivars().send(LinkEvent::LinkChanged);
+        }
+
+        #[unsafe(method(ssidDidChangeForWiFiInterfaceWithName:))]
+        fn ssid_changed(&self, _: &NSString) {
+            let _ = self.ivars().send(LinkEvent::NetworkChanged);
+        }
+
+        #[unsafe(method(bssidDidChangeForWiFiInterfaceWithName:))]
+        fn bssid_changed(&self, _: &NSString) {
+            let _ = self.ivars().send(LinkEvent::NetworkChanged);
+        }
+    }
+);
+
+impl EventForwarder {
+    fn new(events: Sender<LinkEvent>) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(events);
+        unsafe { msg_send![super(this), init] }
     }
 }
 
@@ -65,8 +112,18 @@ impl WifiControl for MacWifi {
         })
     }
 
-    fn subscribe(&mut self, _: Sender<LinkEvent>) -> Result<(), WifiError> {
-        Err(not_in_slice())
+    fn subscribe(&mut self, events: Sender<LinkEvent>) -> Result<(), WifiError> {
+        let forwarder = EventForwarder::new(events);
+        unsafe { self.client.setDelegate(Some(ProtocolObject::<dyn CWEventDelegate>::from_ref(&*forwarder).as_ref())) };
+        self.forwarder = Some(forwarder);
+        let kinds = [CWEventType::PowerDidChange, CWEventType::LinkDidChange, CWEventType::SSIDDidChange, CWEventType::BSSIDDidChange];
+        for kind in kinds {
+            unsafe { self.client.startMonitoringEventWithType_error(kind) }.map_err(|e| WifiError::Platform {
+                code: e.code() as i64,
+                message: e.localizedDescription().to_string(),
+            })?;
+        }
+        Ok(())
     }
 
     fn probe_targets(&self) -> ProbeTargets {
