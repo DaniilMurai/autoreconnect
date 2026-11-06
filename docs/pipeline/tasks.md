@@ -165,7 +165,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-01
 
-- [ ] T-13 — Wire Rejoin/Reassociate into `run`
+- [x] T-13 — Wire Rejoin/Reassociate into `run`
       Files: src/core/run.rs
       Do: execute `Act(Rejoin)` / `Act(Reassociate)` with `remember_current` + creds, the error table from
           contracts (-3900 with a stored password → drop the own copy; `NeedsLocation` → `permission_missing`
@@ -190,7 +190,8 @@ run by the user in their own terminal (brief.md, "How to run")._
 
 - [ ] T-14 — macOS AC runs: detection and recovery
       Files: docs/pipeline/runs/macos-<date>.md (new; logs next to it)
-      Do: user runs the pf blocks; record AC-2 (`drop` and `return`), AC-3 (30 min), AC-4b (3 runs), AC-5,
+      Do: first move T-13's live scripts (`/private/tmp/claude-501/ar-t13`'s sources: `disassociate.swift`, `common.sh`, `prep.sh`,
+          `ac4b.sh`, `ac2.sh`, see reports/T-13.md) into `tools/live/`; user runs the pf blocks; record AC-2 (`drop` and `return`), AC-3 (30 min), AC-4b (3 runs), AC-5,
           AC-6 (process owner, no prompt during recovery), AC-14 (40 % loss, 3 min), AC-1 (10-min `ps` CPU + `footprint` sampling).
       DoD: every AC above has PASS from `check_log.py` (or the stated command for AC-1/AC-6) with numbers in the
            runs file; any FAIL becomes a new task here, not an inline fix.
@@ -213,6 +214,8 @@ run by the user in their own terminal (brief.md, "How to run")._
           the last 5 reconnects with local times, "Retry password" when a credential is missing, "log unavailable"
           when the sink fails, Quit; icon changes per Health. Move T-09's Location-prompt wait (now an `NSRunLoop`
           poll, up to 60 s, in `main`) into the event loop and pass a later answer to the core.
+      State (2026-11-06): code merged; user checked icon, menu reopening and the 5-line list; AC-1 footprint 21 MB.
+           Left: AC-7, AC-8 live runs after T-14.
       DoD: AC-7 (pause → no `recovery_action` under a 2-min block, tray shows paused; resume → AC-2 passes);
            AC-8 (5 menu lines match the last 5 `recovery_action` lines); icon checked by eye; AC-1 still < 60 MB physical footprint.
       Executor: main loop

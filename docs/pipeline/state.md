@@ -1,15 +1,15 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03; T-11, T-12, T-19, T-26 done 2026-11-06)
-- Next: T-13 Wire Rejoin/Reassociate into `run` (ready; live AC-4b/AC-2 need the user)
+- Current stage: 7 — implementation (done: T-01…T-13, T-19, T-24, T-25, T-26; code merged, checks left: T-16 AC-7/AC-8, T-22 dry read + Windows half)
+- Next: T-14 macOS AC runs (user runs sudo/pf; ready now), then T-15 router, T-16 AC-7/AC-8, T-17, T-18; Windows T-20 is ready (CI exists)
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
   `policy.rs`, one after another) and T-08 (bundle, in parallel). Everything else waits for the user.
 - Children (2026-11-03): T-05, T-06, T-08, T-09, T-10 merged; none running.
 - Remote (2026-11-03): private https://github.com/DaniilMurai/autoreconnect, `main` = orchestrator branch through T-10. Cloud sessions run Linux: only platform-free work (policy, tools, Windows CI), never CoreWLAN/keychain/live runs.
-- Children (2026-11-06): T-12 (local_9af0c157-b4ca-48ea-85ea-b1352bf83298) T-26 (local_f198b3b4-df49-4125-b72a-16a26c8f81e3) and T-11 (local_f48fabee-ef76-4f1f-935a-e5d866e9c5f1) merged; none running.
+- Children (2026-11-06): T-12 (local_9af0c157-b4ca-48ea-85ea-b1352bf83298) T-26 (local_f198b3b4-df49-4125-b72a-16a26c8f81e3) and T-11 (local_f48fabee-ef76-4f1f-935a-e5d866e9c5f1), T-13 (local_c31b694e-4544-46db-96a3-2ad892e880ad), T-16 (local_7fce6229-6d22-4fcc-bd47-8327fd928c6a), T-19 (local_876aeedf-0827-4dce-92bd-8489d04f70e8), T-22 (local_55ea374e-f6f5-4893-bce8-28884e8d3645) merged; none running.
 - Updated: 2026-11-06
 
 ## Gates
@@ -80,3 +80,4 @@
 - 2026-11-06 (user, T-16): AC-1 memory = physical footprint (`footprint`), limit 60 MB, replacing `ps` RSS: bare tao + tray-icon is 75 MB RSS on macOS 27.2 (S-04 had 46 MB on 26.6), footprint 21 MB with the app.
 - 2026-11-06 (T-16, code merged, not ticked): tray menu/icon, Pause/Resume, last 5 reconnects, Location wait inside the tao loop, `TapSink` for credential/log notices. Open: user checks icon + menu by eye (incl. menu still opens after several clicks: tray-icon 0.26 opened it only once via Accessibility); AC-7/AC-8 after T-14. Proposals pending: `UiModel.credential_missing/log_unavailable`, `UiCommand::Location` (after T-13).
 - 2026-11-06 (orchestrator check): `open` of the T-16 bundle also started a stale T-11 bundle (same bundle id, ppid 1, 14 MB); both killed. Before live runs, close every AutoReconnect and launch by full path.
+- 2026-11-06 (T-13): live AC-4b PASS (rejoin 3.7 s, restored 3.8 s) and AC-2 PASS (lost 7.3 s, first action `reassociate` at 10.9 s, restored 2.0 s after unblock), re-checked by the orchestrator with check_log.py. No `CredentialStore::delete`: a refused (-3900) own copy is re-imported once associated (proposal: add `delete`). T-14 AC-2 blocks of 40 s+ will include a PowerCycle.
