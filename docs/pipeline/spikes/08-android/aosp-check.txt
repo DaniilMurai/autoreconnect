@@ -1,0 +1,22 @@
+branch: android17-release  (    9996 lines in WifiServiceImpl.java)
+--- the legacy gate
+    private boolean isTargetSdkLessThanQOrPrivileged(String packageName, int pid, int uid) {
+        return (mWifiPermissionsUtil.isTargetSdkLessThan(packageName, Build.VERSION_CODES.Q, uid)
+                && !isGuestUser())
+                || isPrivileged(pid, uid)
+                || mWifiPermissionsUtil.isAdmin(uid, packageName)
+                || mWifiPermissionsUtil.isSystem(packageName, uid);
+    }
+--- public methods that call the gate (third-party app with targetSdk < 29 passes it)
+boolean disconnect( line 3732 gate-calls=1
+boolean reconnect( line 3757 gate-calls=1
+boolean reassociate( line 3779 gate-calls=1
+boolean enableNetwork( line 4787 gate-calls=1
+getConfiguredNetworks( line 3898 gate-calls=2
+--- setWifiEnabled: third party allowed only below Q; airplane/satellite/user-restriction still block
+1695:        if (isThirdParty && !isTargetSdkLessThanQ) {
+1701:        if (mSettingsStore.isSatelliteModeOn()) {
+1707:        if (mSettingsStore.isAirplaneModeOn() && !isPrivileged) {
+1725:                    UserManager.DISALLOW_CHANGE_WIFI_STATE,
+--- confirmation dialog when a legacy app enables Wi-Fi (AOSP default; OEM overlays may differ)
+1085:    <bool translatable="false" name="config_showConfirmationDialogForThirdPartyAppsEnablingWifi">false</bool>

@@ -220,3 +220,135 @@ To verify: the home router (192.168.8.1) answering the CHAOS query — check whe
 for 40 s (internet cut, router reachable). Blocked 17:22:50 → `connectivity_lost {to: upstream_down}` 17:23:04 (14.2 s);
 Gateway probes `Ok` 36–58 ms throughout; zero `recovery_action`; unblocked 17:23:30 → `connectivity_restored` 17:23:35 (5.5 s).
 Logs: `09-gateway/upstream-block-events.jsonl`, `upstream-block-trace.txt`.
+
+## S-08 — What may a normal Android app (no root, not device owner) do toward "detect a broken Wi-Fi and recover faster than the OS"? (desk, 2026-11-06)
+
+**Script:** `spikes/08-android/aosp-check.sh` (reads AOSP Wi-Fi source), output `aosp-check.txt`. Desk only:
+no Android phone (`adb` is not even installed on the dev Mac), no NDK, no `cargo-ndk`.
+AOSP `main` on googlesource stops at 2025-03-12, so the Wi-Fi checks were re-read on the `android16-release` and
+`android17-release` branches (tip 2026-04-15); NetworkStack/Connectivity facts are from `main` (2025) — unverified on 16/17.
+OEM builds (Samsung, Xiaomi) can change any of this — **needs device**.
+
+**Answer:** partly — and the split is the target SDK, not root.
+- An app with **`targetSdkVersion` ≥ 29** (anything on Google Play: Play requires 35 now and 36 from 2026-08-31) can **detect**
+  well but cannot rejoin, reassociate or toggle Wi-Fi.
+- An app with **`targetSdkVersion` 28**, sideloaded, still gets `disconnect` / `reconnect` / `reassociate` /
+  `enableNetwork` / `setWifiEnabled` on Android 10 through 17, with no password and no admin.
+- It installs on Android 15+ because the install floor is target 24; it can never be on Play.
+
+**Facts:**
+
+1. **Turn Wi-Fi off/on — partly (legacy target only).**
+   - [`WifiManager.setWifiEnabled`](https://developer.android.com/reference/android/net/wifi/WifiManager#setWifiEnabled(boolean)): deprecated in API 29. For apps targeting Q+ it "will always fail and return `false`"; apps targeting P or lower "can continue to use this API". DO/PO/system apps are exempt.
+   - AOSP `WifiServiceImpl.setWifiEnabled` (android17-release l.1695) refuses only `isThirdParty && !isTargetSdkLessThanQ`. A legacy app is still refused in airplane mode, in satellite mode, and under `DISALLOW_CHANGE_WIFI_STATE`.
+   - Since Android 13 AOSP can show a confirmation dialog when a legacy app *enables* Wi-Fi. It is controlled by `config_showConfirmationDialogForThirdPartyAppsEnablingWifi`, which is `false` in AOSP. An OEM overlay may turn it on — **needs device**.
+   - Target ≥ 29: only [`Settings.Panel.ACTION_WIFI`](https://developer.android.com/reference/android/provider/Settings.Panel#ACTION_WIFI) (Android 10 [settings panels](https://developer.android.com/about/versions/10/features#settings-panels)). That is a user tap, not recovery.
+
+2. **Disconnect / reconnect / reassociate / connect to a saved network — partly (legacy target only).**
+   - [`disconnect`](https://developer.android.com/reference/android/net/wifi/WifiManager#disconnect()), [`reconnect`](https://developer.android.com/reference/android/net/wifi/WifiManager#reconnect()), [`reassociate`](https://developer.android.com/reference/android/net/wifi/WifiManager#reassociate()), [`enableNetwork`](https://developer.android.com/reference/android/net/wifi/WifiManager#enableNetwork(int,%20boolean)), `addNetwork` and `getConfiguredNetworks` are all deprecated in API 29. For Q+ targets they "always fail and return `false`" (or `-1` / an empty list).
+   - In AOSP all of them go through `isTargetSdkLessThanQOrPrivileged`: true when target < Q and the user is not a guest (android16-release and android17-release, `aosp-check.txt`). The only other requirement is the normal permission `CHANGE_WIFI_STATE`, which the user can revoke under Special app access → Wi-Fi control.
+   - No password is needed: Android holds the saved network's key, unlike macOS (S-06).
+   - `getConfiguredNetworks` (needed to pick a network by id for `enableNetwork(id, true)`) also needs location access (`enforceCanAccessScanResults`). Bare `reconnect()` does not need an id.
+   - Unknown: whether an app's `disconnect()` makes Android treat the network as "user disconnected" and suppress auto-join, the macOS S-01 trap — **needs device**. For suggestions the docs say a user disconnect in the picker makes Android ignore that network while it stays in range ([Handling user disconnects](https://developer.android.com/develop/connectivity/wifi/wifi-suggest#handling_user_disconnects)).
+   - Replacements for target ≥ 29 do not recover a network the user saved:
+     - [`WifiNetworkSuggestion`](https://developer.android.com/develop/connectivity/wifi/wifi-suggest): the app supplies SSID and passphrase, and the platform "ultimately chooses" when to join. Suggestions "are not saved networks", and the first suggestion shows the user a dialog or notification. It is not a "join now".
+     - [`WifiNetworkSpecifier`](https://developer.android.com/reference/android/net/wifi/WifiNetworkSpecifier): a per-app local-only connection with a user dialog. It is not the device's internet Wi-Fi.
+     - [`ACTION_WIFI_ADD_NETWORKS`](https://developer.android.com/reference/android/provider/Settings#ACTION_WIFI_ADD_NETWORKS): the user approves each saved network.
+   - Scans: [`startScan`](https://developer.android.com/develop/connectivity/wifi/wifi-scan#throttling) is limited to 4 per 2 min in the foreground and 1 per 30 min for all background apps (Android 9+). It needs location permission with Location switched on.
+
+3. **Connection state and callbacks — yes.**
+   - [`ConnectivityManager.NetworkCallback`](https://developer.android.com/reference/android/net/ConnectivityManager.NetworkCallback) with `TRANSPORT_WIFI` (`ACCESS_NETWORK_STATE`, normal permission) reports available/lost/capabilities changes.
+   - [`NET_CAPABILITY_VALIDATED`](https://developer.android.com/reference/android/net/NetworkCapabilities#NET_CAPABILITY_VALIDATED) is the OS's own verdict, from NetworkMonitor's HTTP/HTTPS probes.
+   - There is a limit of 100 outstanding callbacks per app ([`registerDefaultNetworkCallback`](https://developer.android.com/reference/android/net/ConnectivityManager#registerDefaultNetworkCallback(android.net.ConnectivityManager.NetworkCallback))).
+   - [`reportNetworkConnectivity(network, bool)`](https://developer.android.com/reference/android/net/ConnectivityManager#reportNetworkConnectivity(android.net.Network,%20boolean)) needs only `ACCESS_NETWORK_STATE` + `INTERNET`. AOSP `ConnectivityService.handleReportNetworkConnectivity` (main) re-validates the network when the report disagrees with its current validated state.
+   - That matters because NetworkMonitor backs off its re-evaluation from 1 s to **10 min** (`INITIAL_/MAX_REEVALUATE_DELAY_MS`, NetworkStack main). A legal "probe now" therefore cuts the time before Android notices a Wi-Fi that came back.
+   - RSSI and link speed come without location. SSID, BSSID and `networkId` are redacted without fine location: AOSP `WifiInfo(source, redactions)` sets `networkId = INVALID_NETWORK_ID`. On API 31+ WifiInfo via a callback also needs [`FLAG_INCLUDE_LOCATION_INFO`](https://developer.android.com/reference/android/net/ConnectivityManager.NetworkCallback#FLAG_INCLUDE_LOCATION_INFO).
+   - Background location rules for a target-28 app on Android 11+ — **needs device**. Recovery itself (`reconnect`/`reassociate`) does not need location.
+
+4. **Bind probes to Wi-Fi — yes.**
+   - [`Network.bindSocket`](https://developer.android.com/reference/android/net/Network#bindSocket(java.net.Socket)) and `getSocketFactory`, or [`bindProcessToNetwork`](https://developer.android.com/reference/android/net/ConnectivityManager#bindProcessToNetwork(android.net.Network)) (the docs prefer per-socket binding).
+   - From Rust: NDK [`android_setsocknetwork(net_handle, fd)`](https://developer.android.com/ndk/reference/group/networking#android_setsocknetwork) (API 23) with the handle from `Network.getNetworkHandle()`. `android_res_nquery` / `android_res_nsend` (API 29) do DNS on a chosen network with `ANDROID_RESOLV_NO_CACHE_LOOKUP`.
+   - Today's `core::probe` binds with `bind_device_by_index` (`IP_BOUND_IF` on macOS). On Linux that is `SO_BINDTODEVICE`, which needs `CAP_NET_RAW`, so an app cannot use it. Android needs its own bind step (unverified on device).
+   - Local network protection affects the gateway probe:
+     - On Android 17, LAN access is blocked for apps targeting 37+ unless they hold `ACCESS_LOCAL_NETWORK`.
+     - Apps targeting below 37 that hold `INTERNET` get an implicit grant ([Local network permission](https://developer.android.com/privacy-and-security/local-network-permission); search snippets, page not read in full).
+     - A target-28 app is therefore unaffected.
+
+5. **Run continuously — partly.**
+   - A foreground service with a visible notification is the "tray".
+   - From Android 14, apps *targeting* 34+ must declare a [service type](https://developer.android.com/develop/background-work/services/fgs/service-types):
+     - `connectedDevice` needs `CHANGE_WIFI_STATE`/`CHANGE_NETWORK_STATE` in the manifest.
+     - `dataSync` cannot start from `BOOT_COMPLETED` when targeting 35+.
+     - `specialUse` is reviewed on Play.
+   - A target-28 app is outside all of this: no type is required, and the Android 12 [background-start limit](https://developer.android.com/about/versions/12/behavior-changes-12#foreground-service-launch-restrictions) applies to target 31+ only. The `BOOT_COMPLETED` start at target 28 on Android 15/16 is still to verify — **needs device**.
+   - **Doze applies to every app whatever its target** ([Doze](https://developer.android.com/training/monitoring-device-state/doze-standby)). Screen off, unplugged and stationary means network suspended, wakelocks ignored, alarms deferred, and `*AllowWhileIdle` alarms limited to once per 9 min.
+   - The battery-optimization exemption allows network and partial wakelocks in Doze, granted by the user in Settings. Play restricts asking for it — irrelevant off Play.
+   - So "probe every few seconds" is realistic while the screen is on or the phone is charging. Screen-off probing is either off or costs a wakelock — battery cost unmeasured.
+
+6. **Rust core — partly.**
+   - `aarch64-linux-android` is a rustc target (`rustc --print target-list`). The std for it, the NDK and `cargo-ndk` are not installed here.
+   - Pure `core::policy`, `core::model` and `core::events` have no OS calls and should cross-compile (unverified).
+   - Not portable as is:
+     - `Cargo.toml` pulls `tray-icon`/`tao` unconditionally.
+     - `core::probe` binds via `IP_BOUND_IF` (point 4).
+     - Wi-Fi control and the callbacks are Java-only APIs (`WifiManager`, `ConnectivityManager`), so a Kotlin shell + JNI is required either way.
+   - Unprivileged ICMP: AOSP `init.rc` writes `ping_group_range "0 2147483647"`, so `SOCK_DGRAM`/`IPPROTO_ICMP` is open to every app uid. Not checked on an OEM build. Raw UDP DNS to the resolver from `LinkProperties.getDnsServers()` is a plain UDP socket (normal `INTERNET` permission).
+   - Option A: Kotlin shell (service, callbacks, WifiManager calls) + Rust `cdylib` via `cargo-ndk`/`jni` for Policy and probes; JNI is the boundary for every observation and action.
+   - Option B: pure Kotlin, porting `Policy` (889 lines with tests).
+   - Not decided here: A keeps one Policy for all OSes, B avoids a second toolchain for a 2-user app.
+
+7. **Does the OS already do it? — mostly; there is one gap.**
+   - Wi-Fi associated without internet: NetworkMonitor marks it not validated. With `config_networkAvoidBadWifi` = 1 (AOSP default, Connectivity `config.xml`) the default network moves to mobile data.
+   - Wi-Fi itself is not recovered. `ClientModeImpl` on `VALIDATION_FAILED` only records it (and may disable autojoin for that network); it disconnects only when ConnectivityService no longer wants the network (`onNetworkUnwanted`).
+   - Re-validation then backs off to 10 min (point 3). The phone stays online on mobile data, but on the dead Wi-Fi (metered data, the "!" icon) until it re-validates or the user toggles Wi-Fi. That is the AC-2 case, and an app can shorten it with `reassociate()` / `disconnect()`+`reconnect()` / a power-cycle plus `reportNetworkConnectivity`.
+   - Not associated: Android rescans every 20/40/80/160 s while disconnected with the screen on (`config_wifiDisconnectedScanIntervalScheduleSec`, AOSP Wi-Fi config) and joins on its own.
+   - All saved networks failing to connect: `WifiLastResortWatchdog` restarts the Wi-Fi stack.
+   - So after a clean AP outage Android, like macOS (S-07), mostly needs no help. The app could only add a `reconnect()` the moment the AP is back, bounded by the 160 s scan step — gain unmeasured.
+   - Upstream down (router fine, ISP dead): the OS switches to mobile data. The app can only report it, as on macOS (UpstreamDown).
+   - A phone with mobile data off or no SIM has no fallback, so a dead-but-associated Wi-Fi hurts most there.
+
+**Verdict:** the Android step is viable, **reduced to** a sideloaded app targeting SDK 28:
+- Kotlin foreground service + notification.
+- Detection: own probes bound to the Wi-Fi network, plus `NET_CAPABILITY_VALIDATED`.
+- Recovery: `reassociate` → `disconnect`+`reconnect` → `setWifiEnabled` off/on, with the same backoff, then `reportNetworkConnectivity`.
+- Probing only while the screen is on or charging.
+
+With a Play-compatible target (≥ 29) the app could only detect and notify, so that variant is dropped.
+Risk: Google may close the legacy-target path in a later release (it has raised the install floor twice).
+
+**Needs device (exact checks for a later run, Android 14–16 phone, `adb`):**
+- D1: the gates on that ROM, so we know the legacy path is not OEM-blocked.
+  - Run: `adb install` an APK with `targetSdkVersion 28`, call `WifiManager.reassociate()`, `disconnect()`, `reconnect()`, `setWifiEnabled(false/true)`, log each return value.
+  - Watch `adb logcat -s WifiService` for "reassociate uid=" vs "not allowed".
+- D2: after the app's `disconnect()` alone, does Android auto-rejoin within 30 s (`adb shell cmd wifi status` every 1 s)? That decides whether `disconnect` is usable or a trap like S-01.
+- D3: does Android ask for confirmation when the app enables Wi-Fi?
+- D4: AC-2-style fault on the phone. The router-side block of the phone's MAC/IP is the user's step; a pf rule on the Mac cannot cut the phone. Measure:
+  - how long `NET_CAPABILITY_VALIDATED` takes to drop;
+  - how long the OS takes to recover alone (it may never);
+  - how long it takes with the app.
+- D5: a foreground service with a 5 s probe, screen on for 30 min / screen off for 30 min. Measure `adb shell dumpsys batterystats` for the uid and whether probes stop in Doze (`dumpsys deviceidle force-idle`).
+- D6: start at `BOOT_COMPLETED` on Android 15/16 at target 28; unprivileged ICMP to the gateway works; `android_setsocknetwork` from Rust binds to Wi-Fi with mobile data on.
+- D7: the install path for the friend (Play Protect warning on a target-28 APK; [developer verification](https://developer.android.com/developer-verification) is enforced on certified devices in BR/ID/SG/TH from 2026-09-30, globally in 2027; limited-distribution accounts cover up to 20 devices).
+
+**Proposed AC-13 (for plan.md; the orchestrator and user decide):**
+
+AC-13: Given — the release APK (`targetSdkVersion 28`) sideloaded on a real Android 14+ phone, its foreground
+       service running with the screen on, Wi-Fi online, mobile data on.
+       When — (a) the router blocks the phone's internet while the phone stays associated (AC-2 analogue), 2 min, then
+       unblocked; (b) the router's Wi-Fi is switched off and on as in S-07 (AC-4a analogue); (c) Wi-Fi is turned off in
+       Quick Settings for 2 min (AC-5 analogue). 3 runs each.
+       Then — (a) `connectivity_lost` ≤ 10 s after the block, first `recovery_action` ≤ 15 s, `connectivity_restored`
+       ≤ 10 s after unblocking and the phone's default network is Wi-Fi again ≤ 15 s after unblocking
+       (`adb shell dumpsys connectivity` / `NET_CAPABILITY_VALIDATED`), where without the app it is measured first and
+       the app must be faster; (b) drop → online ≤ the phone's own time without the app + 5 s, no power-cycle during
+       the outage; (c) Wi-Fi still off after 2 min, `wifi_off_by_user` logged, no `recovery_action`. No root, no
+       device-owner, no password typed into the app. The event log is the same JSONL, pulled with `adb`.
+
+**Rough stage-6 task list (proposal):**
+1. Device spike S-08b: checks D1–D3 on the user's phone; stop the step if D1 fails on that ROM.
+2. Decide Kotlin-only vs. Kotlin + Rust `cdylib` (`decisions.md`); if Rust, gate `tray-icon`/`tao` to desktop targets and add an `android` bind path (`android_setsocknetwork`) in `core::probe`.
+3. Gradle project `android/` (target 28, min ≤ 28 — min may not exceed target; Android 10+ is the tested floor), foreground service + notification (status, pause, last 5 events — the AC-8 analogue), start at boot.
+4. `platform::android` (or Kotlin twin): `WifiControl` = `reassociate`/`reconnect`/`disconnect`/`setWifiEnabled`; `subscribe` = NetworkCallback on Wi-Fi; `probe_targets` from `LinkProperties`; `CredentialStore::required() == false` (like Windows).
+5. Probe loop bound to the Wi-Fi `Network`; `reportNetworkConnectivity` after each recovery; screen-off/charging pacing.
+6. Map Policy actions: Rejoin → `reconnect()`; Reassociate → `reassociate()` then `disconnect()`+`reconnect()`; PowerCycle → `setWifiEnabled`; user Wi-Fi off = `WIFI_STATE_DISABLED` not caused by us.
+7. AC-13 runs with the user (router-side block), then D5 battery check.
