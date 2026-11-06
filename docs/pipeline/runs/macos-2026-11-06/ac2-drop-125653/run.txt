@@ -1,0 +1,14 @@
+== ac2-drop 2026-11-06 12:56:53  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac2-drop-125653
+app pid 71915 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+if the block ever gets stuck: sudo pfctl -a com.apple/autoreconnect -F rules
+rule: block drop out quick on en0 all
+blocked 12:57:21
+unblocked 12:58:01
+ONLINE 12:58:02, 1 s after the reference time
+"ts":"2026-11-06T12:57:07.166676+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+AC-2: FAIL
+  FAIL connectivity_lost after block: missing (limit 10 s)
+  FAIL first recovery_action after block: missing (limit 15 s)
+  FAIL connectivity_restored after unblock: missing (limit 10 s)
+  first action: not reassociate (expected reassociate while associated)
+RESULT: FAIL

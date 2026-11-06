@@ -1,0 +1,20 @@
+== ac14 2026-11-06 13:01:52  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac14-130152
+app pid 72181 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+if the block ever gets stuck: sudo pfctl -a com.apple/autoreconnect -F rules
+rule: block drop out quick on en0 all probability 40%
+blocked 13:02:07
+unblocked 13:05:07
+ONLINE 13:05:07, 0 s after the reference time
+"ts":"2026-11-06T13:01:53.625715+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+"ts":"2026-11-06T13:03:00.614513+01:00", "event":"connection_degraded","detail":{"failed":3,"slow":0,"window":6}
+"ts":"2026-11-06T13:03:15.30188+01:00", "event":"recovery_action","detail":{"kind":"reassociate","ok":true,"duration_ms":14686,"error":null}
+"ts":"2026-11-06T13:03:30.733242+01:00", "event":"connectivity_restored","detail":{"downtime_ms":30118}
+"ts":"2026-11-06T13:04:16.861354+01:00", "event":"connection_degraded","detail":{"failed":3,"slow":0,"window":6}
+"ts":"2026-11-06T13:04:26.902732+01:00", "event":"connectivity_restored","detail":{"downtime_ms":10041}
+AC-14: FAIL
+  FAIL connection_degraded after rule: 53.6 s (limit 30 s)
+  ok   recovery_action count: 1 (limit 2)
+  ok   first recovery_action is reassociate: reassociate
+  ok   rssi, noise and tx rate on every event: 3/3
+  FAIL connectivity_restored after removal: missing (limit 10 s)
+RESULT: FAIL

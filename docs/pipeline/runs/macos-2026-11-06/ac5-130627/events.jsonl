@@ -1,0 +1,4 @@
+{"ts":"2026-11-06T13:06:29.365318+01:00","health":"unknown","signal":{"rssi_dbm":-78,"noise_dbm":-98,"tx_rate_mbps":103.0},"network":"Herbst - Mieter","event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}}
+{"ts":"2026-11-06T13:06:43.614646+01:00","health":"wifi_off_by_user","signal":null,"network":null,"event":"wifi_off_by_user"}
+{"ts":"2026-11-06T13:08:43.778024+01:00","health":"not_associated","signal":null,"network":null,"event":"wifi_on_by_user"}
+{"ts":"2026-11-06T13:08:44.365128+01:00","health":"not_associated","signal":null,"network":null,"event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":586,"error":null}}

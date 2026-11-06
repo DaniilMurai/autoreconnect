@@ -1,0 +1,15 @@
+credential "Herbst - Mieter": own copy, 8 bytes
+probe Dns Ok 30 ms
+probe Dns Ok 33 ms
+probe Dns Ok 29 ms
+probe Dns Ok 47 ms
+probe Dns Ok 52 ms
+probe Dns Timeout 2001 ms
+probe Http Timeout 1500 ms
+probe Http Ok 71 ms
+probe Http Ok 53 ms
+probe Http Ok 68 ms
+probe Http Ok 66 ms
+probe Http Ok 75 ms
+probe Http Ok 61 ms
+probe Dns Ok 29 ms

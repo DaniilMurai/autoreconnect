@@ -1,0 +1,6 @@
+== prep 2026-11-06 12:51:55  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/prep-125155
+app pid 71509 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+answer any prompts (Location: Allow; keychain: Always Allow). Waiting up to 90 s for the credential...
+credential "Herbst - Mieter": own copy, 8 bytes
+"ts":"2026-11-06T12:51:58.38415+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+RESULT: PASS

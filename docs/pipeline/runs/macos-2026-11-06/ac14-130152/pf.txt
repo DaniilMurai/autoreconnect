@@ -1,0 +1,3 @@
+rule: block drop out quick on en0 all probability 40%
+blocked 13:02:07
+unblocked 13:05:07

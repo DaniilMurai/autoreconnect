@@ -1,0 +1,11 @@
+event log: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac4b-125222/events.jsonl
+{"ts":"2026-11-06T12:52:23.867387+01:00","health":"unknown","signal":{"rssi_dbm":-75,"noise_dbm":-96,"tx_rate_mbps":103.0},"network":"Herbst - Mieter","event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}}
+{"ts":"2026-11-06T12:52:38.544994+01:00","health":"not_associated","signal":null,"network":null,"event":"connectivity_lost","detail":{"to":"not_associated"}}
+{"ts":"2026-11-06T12:52:42.817158+01:00","health":"not_associated","signal":null,"network":null,"event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":4271,"error":null}}
+{"ts":"2026-11-06T12:52:43.119303+01:00","health":"healthy","signal":{"rssi_dbm":-75,"noise_dbm":-96,"tx_rate_mbps":0.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":4573}}
+{"ts":"2026-11-06T12:53:04.289623+01:00","health":"not_associated","signal":null,"network":null,"event":"connectivity_lost","detail":{"to":"not_associated"}}
+{"ts":"2026-11-06T12:53:07.071877+01:00","health":"not_associated","signal":null,"network":null,"event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":2781,"error":null}}
+{"ts":"2026-11-06T12:53:07.247932+01:00","health":"healthy","signal":{"rssi_dbm":-77,"noise_dbm":-96,"tx_rate_mbps":0.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":2958}}
+{"ts":"2026-11-06T12:53:28.142957+01:00","health":"not_associated","signal":null,"network":null,"event":"connectivity_lost","detail":{"to":"not_associated"}}
+{"ts":"2026-11-06T12:53:31.257533+01:00","health":"not_associated","signal":null,"network":null,"event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":3113,"error":null}}
+{"ts":"2026-11-06T12:53:31.45713+01:00","health":"healthy","signal":{"rssi_dbm":-76,"noise_dbm":-97,"tx_rate_mbps":0.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":3314}}

@@ -1,0 +1,3 @@
+credential "Herbst - Mieter": own copy, 8 bytes
+probe Dns Ok 33 ms
+probe Dns Ok 30 ms
