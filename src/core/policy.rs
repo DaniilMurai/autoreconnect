@@ -20,6 +20,8 @@ pub struct Config {
     pub degraded_window: u8,
     pub degraded_min_bad: u8,
     pub slow_rtt: Duration,
+    pub degraded_exit_clean: u8,
+    pub degraded_probe_interval: Duration,
     pub link_poll_interval: Duration,
     pub rejoin_backoff: Vec<Duration>,
     pub power_cycle_backoff: Vec<Duration>,
@@ -56,9 +58,13 @@ impl Default for Config {
             settle_after_power_cycle: s(10),
             // DNS answered `Refused` for ~3 s after the OS rejoined, before the route was up (T-12 live run).
             settle_after_association: s(5),
-            degraded_window: 6,
+            degraded_window: 10,
             degraded_min_bad: 3,
-            slow_rtt: Duration::from_millis(1500),
+            // An HTTP probe that lost a packet takes one TCP retransmit (~1 s); on this link clean ones take 50–500 ms (T-28).
+            slow_rtt: Duration::from_millis(800),
+            // 14 × 0.4 s fits the 10 s restore budget; under T-14's 40 % loss ~54 % of probes were clean (0.54^14 ≈ 2e-4).
+            degraded_exit_clean: 14,
+            degraded_probe_interval: Duration::from_millis(400),
             link_poll_interval: s(1),
             rejoin_backoff: [0, 2, 4, 8, 16, 30].map(s).to_vec(),
             power_cycle_backoff: [30, 60, 120, 240, 480, 600].map(s).to_vec(),
@@ -100,6 +106,8 @@ pub struct Policy {
     lost_at: Option<Instant>,
     /// Last `degraded_window` DNS/HTTP probes as (failed, slow).
     window: VecDeque<(bool, bool)>,
+    /// Good DNS/HTTP probes in a row; Degraded is left only after `degraded_exit_clean` of them.
+    clean_run: u8,
     healthy_since: Option<Instant>,
     last_action_at: Option<Instant>,
     power_cycles: usize,
@@ -123,6 +131,7 @@ impl Policy {
             failures: 0,
             lost_at: None,
             window: VecDeque::new(),
+            clean_run: 0,
             healthy_since: None,
             last_action_at: None,
             power_cycles: 0,
@@ -201,7 +210,9 @@ impl Policy {
             if self.window.len() >= usize::from(self.cfg.degraded_window) {
                 self.window.pop_front();
             }
-            self.window.push_back((!ok, ok && probe.rtt >= self.cfg.slow_rtt));
+            let slow = ok && probe.rtt >= self.cfg.slow_rtt;
+            self.window.push_back((!ok, slow));
+            self.clean_run = if ok && !slow { self.clean_run.saturating_add(1) } else { 0 };
         }
         match (probe.kind, ok) {
             (ProbeKind::Gateway, true) => self.upstream_down(obs.at, events),
@@ -210,9 +221,10 @@ impl Policy {
                 self.failures = 0;
                 let (failed, slow) = self.window_counts();
                 let bad = failed + slow;
-                // Leaving Degraded needs a clean window, or 40 % loss flaps Healthy/Degraded every few probes.
-                if bad >= self.cfg.degraded_min_bad || (self.health == Health::Degraded && bad > 0) {
-                    self.degraded(obs.at, failed, slow, self.cfg.suspect_probe_interval, events)
+                // A clean window alone came every ~30 s under 40 % loss and flapped Healthy/Degraded (T-14).
+                let stay = self.health == Health::Degraded && self.clean_run < self.cfg.degraded_exit_clean;
+                if bad >= self.cfg.degraded_min_bad || stay {
+                    self.degraded(obs.at, failed, slow, self.cfg.degraded_probe_interval, events)
                 } else {
                     self.healthy(obs.at, events)
                 }
@@ -232,6 +244,7 @@ impl Policy {
                     return self.step(events, NextAction::Probe { kind: ProbeKind::Gateway, after: Duration::ZERO });
                 }
                 if lossy && !lost {
+                    let after = self.cfg.degraded_probe_interval.saturating_sub(probe.rtt);
                     return self.degraded(obs.at, failed, slow, after, events);
                 }
                 self.step(events, NextAction::Probe { kind: ProbeKind::Http, after })
@@ -401,6 +414,7 @@ impl Policy {
         self.lost_at = None;
         self.failures = 0;
         self.window.clear();
+        self.clean_run = 0;
         self.rejoins = 0;
         self.last_rejoin_at = None;
         if paused {
@@ -656,8 +670,8 @@ mod tests {
         let mut t = Instant::now();
         let mut kind = ProbeKind::Dns;
         for i in 0..600 {
-            // Pairs of slow probes every 7th probe: never more than 2 bad in a window of 6.
-            let rtt = if i % 7 < 2 { cfg.slow_rtt + Duration::from_millis(200) } else { Duration::from_millis(50) };
+            // Pairs of slow probes every 11th probe: never more than 2 bad in a window of 10.
+            let rtt = if i % (u64::from(cfg.degraded_window) + 1) < 2 { cfg.slow_rtt + Duration::from_millis(200) } else { Duration::from_millis(50) };
             let probe = ProbeResult { kind, started: t, rtt, outcome: ProbeOutcome::Ok };
             t += rtt;
             let step = p.on_observation(&Observation { at: t, link: associated(), probe: Some(probe) });
@@ -690,10 +704,10 @@ mod tests {
         let done = t0 + Duration::from_secs(10);
         p.on_action_done(RecoveryKind::PowerCycle, &Ok(()), done);
         let mut last = None;
-        for i in 0..usize::from(cfg.degraded_window) {
+        for i in 0..usize::from(cfg.degraded_exit_clean) {
             last = Some(p.on_observation(&slow(done + Duration::from_secs(11 + i as u64), Duration::from_millis(50))));
-            if i + 1 < usize::from(cfg.degraded_window) {
-                assert_eq!(last.as_ref().unwrap().health, Health::Degraded, "left Degraded before a clean window");
+            if i + 1 < usize::from(cfg.degraded_exit_clean) {
+                assert_eq!(last.as_ref().unwrap().health, Health::Degraded, "left Degraded before the clean run");
             }
         }
         let last = last.unwrap();
@@ -885,5 +899,176 @@ mod tests {
     fn refused_past_the_association_settle_still_counts() {
         let steps = refused_after_join(LinkState::Disassociated, Duration::from_secs(20));
         assert!(steps.iter().any(|s| matches!(s.next, NextAction::Probe { kind: ProbeKind::Gateway, .. })));
+    }
+
+    /// T-14's AC-14 run (2026-11-06 13:01:52, 40 % pf loss 13:02:07–13:05:07): the probe lines of its stderr.
+    const AC14_TRACE: &str = include_str!("../../docs/pipeline/runs/macos-2026-11-06/ac14-130152/stderr.txt");
+
+    fn ac14_trace() -> Vec<(ProbeKind, ProbeOutcome, Duration)> {
+        AC14_TRACE
+            .lines()
+            .filter_map(|l| l.strip_prefix("probe "))
+            .map(|l| {
+                let f: Vec<_> = l.split_whitespace().collect();
+                let kind = match f[0] { "Dns" => ProbeKind::Dns, "Http" => ProbeKind::Http, k => panic!("{k}") };
+                let outcome = match f[1] { "Ok" => ProbeOutcome::Ok, "Timeout" => ProbeOutcome::Timeout, o => panic!("{o}") };
+                (kind, outcome, Duration::from_millis(f[2].parse().unwrap()))
+            })
+            .collect()
+    }
+
+    /// Probes 5..=95 of the trace started while the rule was on (from replaying it through the T-14 policy, whose
+    /// event times it matched within 2 s; the trace itself has no timestamps).
+    /// The gateway ping is one packet each way like DNS, so it draws from the DNS probes.
+    fn ac14_loss_pool(kind: ProbeKind) -> Vec<(ProbeOutcome, Duration)> {
+        let want = if kind == ProbeKind::Http { ProbeKind::Http } else { ProbeKind::Dns };
+        ac14_trace()[5..=95].iter().filter(|(k, ..)| *k == want).map(|(_, o, rtt)| (o.clone(), *rtt)).collect()
+    }
+
+    /// What a replayed AC-14 run saw, in seconds since the rule was applied.
+    #[derive(Debug)]
+    struct Ac14Replay {
+        degraded_at: Option<Duration>,
+        restored_during_loss: usize,
+        lost: usize,
+        restored_after_removal: Option<Duration>,
+        actions: Vec<(Duration, RecoveryKind)>,
+    }
+
+    /// Drives the policy on T-14's time axis: rule applied 13.4 s after start, removed 180 s later. A probe that
+    /// starts under the rule takes the next outcome from `draw` (a timeout lasts the requested kind's timeout);
+    /// after removal the first probe takes 1071 ms (T-27's first probe after an unblock), the rest 60 ms.
+    fn replay_ac14(cfg: &Config, mut draw: impl FnMut(ProbeKind) -> (ProbeOutcome, Duration)) -> Ac14Replay {
+        let mut p = Policy::new(cfg.clone());
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        let (on, off) = (t0 + Duration::from_millis(13_400), t0 + Duration::from_millis(193_400));
+        let mut r = Ac14Replay { degraded_at: None, restored_during_loss: 0, lost: 0, restored_after_removal: None, actions: Vec::new() };
+        let mut step = p.on_observation(&Observation { at: t0, link: associated(), probe: None });
+        let (mut t, mut after_removal) = (t0, 0);
+        while t < off + Duration::from_secs(30) {
+            let (kind, wait) = match step.next {
+                NextAction::Probe { kind, after } => (kind, after),
+                other => panic!("unexpected {other:?}"),
+            };
+            let start = t + wait;
+            let (outcome, mut rtt) = if start < on {
+                (ProbeOutcome::Ok, Duration::from_millis(35))
+            } else if start < off {
+                draw(kind)
+            } else {
+                after_removal += 1;
+                (ProbeOutcome::Ok, Duration::from_millis(if after_removal == 1 { 1071 } else { 60 }))
+            };
+            if outcome == ProbeOutcome::Timeout {
+                rtt = match kind {
+                    ProbeKind::Dns => cfg.dns_timeout,
+                    ProbeKind::Http => cfg.http_timeout,
+                    ProbeKind::Gateway => cfg.gateway_timeout,
+                };
+            } else if kind == ProbeKind::Gateway {
+                rtt = Duration::from_millis(5);
+            }
+            t = start + rtt;
+            let probe = ProbeResult { kind, started: start, rtt, outcome };
+            step = p.on_observation(&Observation { at: t, link: associated(), probe: Some(probe) });
+            for e in &step.events {
+                match e {
+                    EventKind::ConnectionDegraded { .. } => {
+                        r.degraded_at.get_or_insert(t.saturating_duration_since(on));
+                    }
+                    EventKind::ConnectivityLost { .. } => r.lost += 1,
+                    EventKind::ConnectivityRestored { .. } if t < off => r.restored_during_loss += 1,
+                    EventKind::ConnectivityRestored { .. } => {
+                        r.restored_after_removal.get_or_insert(t - off);
+                    }
+                    other => panic!("unexpected event {other:?}"),
+                }
+            }
+            if let NextAction::Act(kind) = step.next {
+                r.actions.push((t.saturating_duration_since(on), kind));
+                // T-14's reassociate under the loss took 14 686 ms.
+                t += Duration::from_millis(14_686);
+                step = p.on_action_done(kind, &Ok(()), t);
+            }
+        }
+        r
+    }
+
+    /// AC-14's checks plus T-28's: no lost and no restore while the rule is on.
+    fn ac14_passes(r: &Ac14Replay) -> bool {
+        let in_loss: Vec<_> = r.actions.iter().filter(|(t, _)| *t < Duration::from_secs(180)).collect();
+        r.degraded_at.is_some_and(|d| d <= Duration::from_secs(30))
+            && (r.lost, r.restored_during_loss) == (0, 0)
+            && r.restored_after_removal.is_some_and(|d| d <= Duration::from_secs(10))
+            && in_loss.len() <= 2
+            && in_loss.first().map(|a| a.1) == Some(RecoveryKind::Reassociate)
+    }
+
+    fn splitmix(state: &mut u64) -> u64 {
+        *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = *state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// The T-14 policy fed this trace in its own order reproduces that run's events (degraded 65 s after start,
+    /// restored at 97 s and 151 s; the log says 67, 97 and 153 s), which is what the time axis above rests on.
+    #[test]
+    fn ac14_trace_replays_t14_events_under_the_old_rule() {
+        let old = Config { degraded_window: 6, slow_rtt: Duration::from_millis(1500), degraded_exit_clean: 6,
+            degraded_probe_interval: Duration::from_secs(1), ..Config::default() };
+        let mut p = Policy::new(old);
+        p.set_capabilities(true);
+        let t0 = Instant::now();
+        let mut step = p.on_observation(&Observation { at: t0, link: associated(), probe: None });
+        let (mut t, mut seen) = (t0, Vec::new());
+        for (kind, outcome, rtt) in ac14_trace() {
+            let NextAction::Probe { after, .. } = step.next else { panic!("{:?}", step.next) };
+            let start = t + after;
+            t = start + rtt;
+            step = p.on_observation(&Observation { at: t, link: associated(), probe: Some(ProbeResult { kind, started: start, rtt, outcome }) });
+            seen.extend(step.events.iter().map(|e| (std::mem::discriminant(e), (t - t0).as_secs())));
+            if let NextAction::Act(k) = step.next {
+                t += Duration::from_millis(14_686);
+                step = p.on_action_done(k, &Ok(()), t);
+            }
+        }
+        let degraded = std::mem::discriminant(&EventKind::ConnectionDegraded { failed: 0, slow: 0, window: 0 });
+        let restored = std::mem::discriminant(&EventKind::ConnectivityRestored { downtime_ms: 0 });
+        assert_eq!(seen, vec![(degraded, 65), (restored, 96), (degraded, 141), (restored, 151)]);
+    }
+
+    /// T-28 DoD: T-14's probe outcomes in their recorded order, one cursor per probe kind.
+    #[test]
+    fn ac14_t14_trace_degrades_within_30_s_and_holds_until_removal() {
+        let pools = [ac14_loss_pool(ProbeKind::Dns), ac14_loss_pool(ProbeKind::Http)];
+        let mut next = [0, 0];
+        let r = replay_ac14(&Config::default(), |k| {
+            let j = (k == ProbeKind::Http) as usize;
+            next[j] += 1;
+            pools[j][(next[j] - 1) % pools[j].len()].clone()
+        });
+        assert!(ac14_passes(&r), "{r:?}");
+    }
+
+    /// The same outcomes drawn at random, 2000 runs. What fails is mostly a DNS + 2 HTTP timeouts in a row on a
+    /// still-clean window: that is AC-2's outage rule, so it goes to the gateway check and back (T-28 report).
+    #[test]
+    fn ac14_t14_outcomes_resampled_pass_nine_runs_in_ten() {
+        let pools = [ac14_loss_pool(ProbeKind::Dns), ac14_loss_pool(ProbeKind::Http)];
+        let n = 2000;
+        let mut pass = 0;
+        for seed in 1..=n {
+            let mut st = seed;
+            let r = replay_ac14(&Config::default(), |k| {
+                let pool = &pools[(k == ProbeKind::Http) as usize];
+                pool[(splitmix(&mut st) % pool.len() as u64) as usize].clone()
+            });
+            pass += ac14_passes(&r) as u32;
+        }
+        println!("resampled AC-14: {pass}/{n} pass");
+        assert!(pass as f64 / n as f64 >= 0.9, "{pass}/{n}");
     }
 }

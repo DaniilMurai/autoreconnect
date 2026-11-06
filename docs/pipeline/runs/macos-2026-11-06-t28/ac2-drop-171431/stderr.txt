@@ -1,0 +1,30 @@
+17:14:33.321 credential "Herbst - Mieter": own copy, 8 bytes
+17:14:33.419 probe Dns Ok 49 ms
+17:14:36.532 probe Dns Ok 61 ms
+17:14:39.618 probe Dns Ok 35 ms
+17:14:42.707 probe Dns Ok 36 ms
+17:14:45.782 probe Dns Ok 29 ms
+17:14:50.829 probe Dns Timeout 2001 ms
+17:14:52.359 probe Http Timeout 1500 ms
+17:14:53.887 probe Http Timeout 1500 ms
+17:14:54.928 probe Gateway Timeout 1005 ms
+17:15:02.050 wifi events [NetworkChanged, LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -77, noise_dbm: -96, tx_rate_mbps: 0.0 } }
+17:15:04.077 probe Dns Timeout 2001 ms
+17:15:05.111 probe Gateway Timeout 1002 ms
+17:15:05.138 wifi events [LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -78, noise_dbm: -97, tx_rate_mbps: 0.0 } }
+17:15:07.161 probe Dns Timeout 2001 ms
+17:15:08.211 probe Gateway Timeout 1011 ms
+17:15:10.754 probe Http Timeout 1500 ms
+17:15:11.791 probe Gateway Timeout 1003 ms
+17:15:14.336 probe Http Timeout 1500 ms
+17:15:15.378 probe Gateway Timeout 1004 ms
+17:15:17.926 probe Http Timeout 1500 ms
+17:15:18.964 probe Gateway Timeout 1001 ms
+17:15:21.511 probe Http Timeout 1500 ms
+17:15:22.561 probe Gateway Timeout 1011 ms
+17:15:25.106 probe Http Timeout 1501 ms
+17:15:26.144 probe Gateway Timeout 1003 ms
+17:15:28.283 probe Http Ok 1091 ms
+17:15:31.356 probe Dns Ok 30 ms
+17:15:34.429 probe Dns Ok 30 ms
+17:15:37.518 probe Dns Ok 43 ms
