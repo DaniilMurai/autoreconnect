@@ -216,7 +216,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop (user runs sudo)
       Depends on: T-14
 
-- [ ] T-28 — Re-tune the Degraded rule for AC-14
+- [x] T-28 — Re-tune the Degraded rule for AC-14
       Files: src/core/policy.rs, docs/pipeline/contracts.md (thresholds)
       Do: from T-14 (AC-14 FAIL: degraded at 53.6 s > 30 s; health flapped Degraded → restored twice while 40 % loss
           was on). Change the window/threshold and require a longer clean run before leaving Degraded.
