@@ -387,7 +387,7 @@ pub fn run_core(
 | `lost_after_consecutive` failed probes in a row (the first may be DNS, the rest HTTP), unless the window already had a bad probe before the run; then a whole failed window | one Gateway probe decides | — |
 | … and the gateway does not answer | → NoInternet, log `connectivity_lost` | Reassociate at once, then PowerCycle on `power_cycle_backoff`; ≥ `min_action_gap` between any two (AC-3) |
 | … and the gateway answers | → UpstreamDown, log `connectivity_lost {to: upstream_down}`; HTTP + Gateway every `upstream_probe_interval` | **none**; if the gateway stops answering → NoInternet path |
-| ≥ `degraded_min_bad` failed/slow in the last `degraded_window` probes, not lost | → Degraded, log `connection_degraded` | Reassociate, then PowerCycle after `degraded_power_cycle_after`, then backoff, never less than `degraded_power_cycle_after` apart (≤ 2 actions in 3 min, AC-14) |
+| ≥ `degraded_min_bad` failed/slow in the last `degraded_window` probes, not lost | → Degraded, log `connection_degraded`; HTTP every `degraded_probe_interval`; back to Healthy only after `degraded_exit_clean` good (ok, not slow) probes in a row (T-28) | Reassociate, then PowerCycle after `degraded_power_cycle_after`, then backoff, never less than `degraded_power_cycle_after` apart (≤ 2 actions in 3 min, AC-14) |
 | Link drops to Disassociated (OS event or poll) | link every `link_poll_interval` | Rejoin at once (`FromCache`), retries on `rejoin_backoff`; **never PowerCycle while not associated** (S-07: the AP may just be away) |
 | PoweredOff, not by us | → WifiOffByUser, log it | none until powered on (AC-5) |
 | Powered on after WifiOffByUser (first link Disassociated) | → NotAssociated, log `wifi_on_by_user`; no `connectivity_lost`, no `connectivity_restored` later | as Disassociated (T-26) |
@@ -418,9 +418,11 @@ pub struct Config {
     pub upstream_probe_interval: Duration,    // 5 s
     pub settle_after_power_cycle: Duration,   // 10 s: failed probes right after our power-cycle are not counted (slice pf run)
     pub settle_after_association: Duration,   // 5 s: Refused probes right after a fresh association are not counted (T-12 live run: ~3 s)
-    pub degraded_window: u8,                  // 6 probes
+    pub degraded_window: u8,                  // 10 probes (T-28; was 6)
     pub degraded_min_bad: u8,                 // 3
-    pub slow_rtt: Duration,                   // 1500 ms
+    pub slow_rtt: Duration,                   // 800 ms (T-28; was 1500): one TCP retransmit ≈ 1 s, clean HTTP 50–500 ms
+    pub degraded_exit_clean: u8,              // 14 good probes in a row to leave Degraded (T-28)
+    pub degraded_probe_interval: Duration,    // 400 ms while Degraded: 14 × ~0.46 s fits AC-14's 10 s restore (T-28)
     pub link_poll_interval: Duration,         // 1 s (backup to OS events)
     pub rejoin_backoff: Vec<Duration>,        // 0, 2, 4, 8, 16, 30 s, then 30 s
     pub power_cycle_backoff: Vec<Duration>,   // 30, 60, 120, 240, 480, 600 s, then 600 s
