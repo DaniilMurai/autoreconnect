@@ -235,7 +235,7 @@ run by the user in their own terminal (brief.md, "How to run")._
 
 ## Windows
 
-- [ ] T-19 — GitHub remote and Windows CI build
+- [x] T-19 — GitHub remote and Windows CI build
       Files: .github/workflows/windows.yml (new)
       Do: the user creates the GitHub repo and adds the remote; the workflow builds
           `x86_64-pc-windows-msvc` release on push and uploads `autoreconnect.exe` as an artifact; macOS-only
@@ -248,7 +248,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Files: src/platform/windows.rs (new), Cargo.toml (`windows` with `Win32_NetworkManagement_WiFi`, `Devices_Radios`)
       Do: `WifiControl` with `WlanQueryInterface` / `WlanConnect` / `WlanDisconnect`, power via `Radio` or
           `WlanSetInterface(radio_state)`, `NeedsAdmin` → disconnect+connect fallback (S-02); resolvers and
-          gateway from `GetAdaptersAddresses`; Gateway probe via `IcmpSendEcho`; `CredentialStore::required() == false`;
+          gateway from `GetAdaptersAddresses`; probes bound to the Wi-Fi interface (`IP_UNICAST_IF` or source address; T-19 left `iface` unused on Windows); Gateway probe via `IcmpSendEcho`; `CredentialStore::required() == false`;
           Windows HTTP probe URL/body in `Config`; `LoginItem` = HKCU `Run` key.
       DoD: CI green; the S-02 follow-up script run on the friend's laptop answers: radio off/on without admin
            (yes/no), `WlanConnect` on an all-user profile (yes/no), SSID with Location consent off.

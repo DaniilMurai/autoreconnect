@@ -1,7 +1,7 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03; T-11, T-12, T-26 done 2026-11-06)
+- Current stage: 7 — implementation (T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-24, T-25 done 2026-11-03; T-11, T-12, T-19, T-26 done 2026-11-06)
 - Next: T-13 Wire Rejoin/Reassociate into `run` (ready; live AC-4b/AC-2 need the user)
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
@@ -75,3 +75,4 @@
 - 2026-11-06 (T-26): fresh association = Associated while NotAssociated/WifiOffByUser; `settle_after_association` 5 s skips only `Refused` (timeouts still count); power-on after user-off logs `wifi_on_by_user`. Contracts updated.
 - 2026-11-06 (T-11): rejoin after CoreWLAN `disassociate()` via own `associate` = 2.3 s from the cached BSS, 3.6 s with a fresh scan (network "lutix"); a failed join drops the cached object; first-seen network needs the credential import before Rejoin (→ T-13 Do line).
 - 2026-11-06 (user): T-19 (Windows CI), T-16 (tray, code only; AC-7/AC-8 after T-14) and T-22 (macOS packaging half) start before their dependencies, in parallel with T-13; "macOS first" relaxed for CI only. T-19's child may push its own branch to origin (user OK); nothing else is pushed.
+- 2026-11-06 (T-19): Windows CI green (https://github.com/DaniilMurai/autoreconnect/actions/runs/42133338867), artifact `autoreconnect-windows-x86_64`; the exe is a stub until T-20; probe interface binding is macOS-only for now. T-16 child was interrupted by the user mid-turn (branch claude/t16-tray-090ddc, not merged).
