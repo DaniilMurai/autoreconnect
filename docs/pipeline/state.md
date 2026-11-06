@@ -19,7 +19,7 @@
 | 0 context load | done | environment scouted (macOS 26.6.2 arm64, Rust 1.99.1) |
 | 1 idea | done, confirmed 2026-11-02 (user moved to stage 2) | brief.md |
 | 2 plan | revised after S-01…S-07, go given 2026-11-03 | plan.md |
-| 3 spikes | S-01…S-07, S-09 done (S-07 2026-11-03: macOS fast after a clean AP outage); S-08 pending (Android, desk) | spikes/FINDINGS.md |
+| 3 spikes | S-01…S-07, S-09 done (S-07 2026-11-03: macOS fast after a clean AP outage); S-08 done 2026-11-06 (desk: reduced, sideloaded targetSdk 28); S-08b device check pending | spikes/FINDINGS.md |
 | 4 contracts | done 2026-11-03; revised after the slice (gateway probe, UpstreamDown, NotReady, settle, dry run) | contracts.md |
 | 5 slice | done 2026-11-03: AC-2 live 6.2 s / 9.4 s / 6.7 s; How to run written | src/, Cargo.toml, brief.md |
 | 6 tasks | done 2026-11-03, go given: T-01…T-23 (core 7, macOS 8, tray/login 3, Windows 3, hand-off 2); Android none until S-08 | tasks.md |
@@ -82,3 +82,5 @@
 - 2026-11-06 (orchestrator check): `open` of the T-16 bundle also started a stale T-11 bundle (same bundle id, ppid 1, 14 MB); both killed. Before live runs, close every AutoReconnect and launch by full path.
 - 2026-11-06 (T-13): live AC-4b PASS (rejoin 3.7 s, restored 3.8 s) and AC-2 PASS (lost 7.3 s, first action `reassociate` at 10.9 s, restored 2.0 s after unblock), re-checked by the orchestrator with check_log.py. No `CredentialStore::delete`: a refused (-3900) own copy is re-imported once associated (proposal: add `delete`). T-14 AC-2 blocks of 40 s+ will include a PowerCycle.
 - 2026-11-06 (user): platform order = macOS → Android → Windows (no Windows machine to test on now). Android needs S-08 (desk spike) and then tasks from stage 6; T-20/T-21 wait until Android is done or dropped. plan.md, brief.md, tasks.md updated.
+- 2026-11-06 (user, in the T-14 session): AC-3 (30-min block) dropped from T-14; the script is removed, the runs file marks it "dropped by the user". plan.md AC-3 stays as written until stage 9.
+- 2026-11-06 (S-08): Android viable only as a sideloaded APK with targetSdk 28 (legacy WifiManager reassociate/disconnect/reconnect/setWifiEnabled still allowed on Android 10–17 per AOSP); Play (target ≥ 35) = detect-only → dropped. Android itself does not recover a Wi-Fi without internet (switches to mobile data). Device checks D1–D7 need a phone + adb (none on this Mac). Scope decision with the user pending.
