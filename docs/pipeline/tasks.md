@@ -1,9 +1,8 @@
 # Tasks
 
 _Created 2026-11-03 from [plan.md](plan.md), [contracts.md](contracts.md) and the stage-5 slice
-(`src/`). Order in the file = order of execution. macOS first (plan steps 1–4), then Windows
-(step 5), then the hand-off (step 6). Android (step 7) gets no tasks until spike S-08 is done
-after v1 ships._
+(`src/`). Order in the file = order of execution, except: since 2026-11-06 (user) the order is macOS (plan steps 1–4),
+then Android (step 7; no tasks until spike S-08), then Windows (step 5, T-20, T-21) and the hand-off (step 6)._
 
 _Already in the slice, not repeated here: probes (DNS/HTTP/Gateway, connect by address),
 `Policy` for Healthy / NoInternet / UpstreamDown / WifiOffByUser with settling, JSONL sink

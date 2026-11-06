@@ -28,7 +28,7 @@ traffic passes, and a poor/unstable connection. Success = the user stops reconne
 
 ## Scope v1
 
-- Platforms: Windows and macOS. Android is a bonus platform after both ship (never blocks v1).
+- Platforms, in order: macOS, Android (if spike S-08 shows a normal app can help), Windows (user, 2026-11-06).
   Linux is a later option.
 - UI: tray / menu-bar icon only — status, pause toggle, recent reconnect log,
   start at login. No main window.
@@ -39,7 +39,7 @@ traffic passes, and a poor/unstable connection. Success = the user stops reconne
 ## Out of scope (v1)
 
 - Linux.
-- Android as a requirement (it is a bonus, see Scope).
+- Android features a normal app may not use (S-08 decides).
 - Choosing between networks, captive-portal login, VPN handling.
 - Code signing, notarization, auto-update, installers beyond a zip/dmg.
 - Telemetry or any server side.

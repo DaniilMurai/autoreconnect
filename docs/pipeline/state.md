@@ -2,7 +2,7 @@
 
 - Project: AutoReconnect (working name)
 - Current stage: 7 — implementation (done: T-01…T-13, T-19, T-24, T-25, T-26; code merged, checks left: T-16 AC-7/AC-8, T-22 dry read + Windows half)
-- Next: T-14 macOS AC runs (user runs sudo/pf; ready now), then T-15 router, T-16 AC-7/AC-8, T-17, T-18; Windows T-20 is ready (CI exists)
+- Next: T-14 macOS AC runs (user runs sudo/pf; ready now), then T-15 router, T-16 AC-7/AC-8, T-17, T-18; then Android: S-08 spike → tasks; Windows T-20/T-21 after Android
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
@@ -81,3 +81,4 @@
 - 2026-11-06 (T-16, code merged, not ticked): tray menu/icon, Pause/Resume, last 5 reconnects, Location wait inside the tao loop, `TapSink` for credential/log notices. Open: user checks icon + menu by eye (incl. menu still opens after several clicks: tray-icon 0.26 opened it only once via Accessibility); AC-7/AC-8 after T-14. Proposals pending: `UiModel.credential_missing/log_unavailable`, `UiCommand::Location` (after T-13).
 - 2026-11-06 (orchestrator check): `open` of the T-16 bundle also started a stale T-11 bundle (same bundle id, ppid 1, 14 MB); both killed. Before live runs, close every AutoReconnect and launch by full path.
 - 2026-11-06 (T-13): live AC-4b PASS (rejoin 3.7 s, restored 3.8 s) and AC-2 PASS (lost 7.3 s, first action `reassociate` at 10.9 s, restored 2.0 s after unblock), re-checked by the orchestrator with check_log.py. No `CredentialStore::delete`: a refused (-3900) own copy is re-imported once associated (proposal: add `delete`). T-14 AC-2 blocks of 40 s+ will include a PowerCycle.
+- 2026-11-06 (user): platform order = macOS → Android → Windows (no Windows machine to test on now). Android needs S-08 (desk spike) and then tasks from stage 6; T-20/T-21 wait until Android is done or dropped. plan.md, brief.md, tasks.md updated.

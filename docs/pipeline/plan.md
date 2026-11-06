@@ -1,7 +1,8 @@
 # Plan
 
 _Created 2026-11-02, revised 2026-11-02 and 2026-11-03 after the stage-3 spikes ([spikes/FINDINGS.md](spikes/FINDINGS.md)).
-macOS first (it is the dev machine), Windows second on the same core, Android as a bonus.
+macOS first (it is the dev machine), then Android, then Windows on the same core (order changed by the user 2026-11-06:
+no Windows machine to test on now).
 The core value is speed where the OS is slow or does nothing: no rejoin at all, connected
 with no traffic, a poor connection. After a clean AP outage macOS is already fast (S-07),
 so there the app must only not get in the way (2026-11-03)._
@@ -48,9 +49,9 @@ so there the app must only not get in the way (2026-11-03)._
 6. **Hand-off build for the friend** — unsigned zip/dmg + a one-page "how to open it"
    (Open Anyway on macOS; SmartScreen "Run anyway" and Smart App Control on Windows, S-05).
    Done = AC-12.
-7. **Android (bonus, after step 6, never blocks v1)** — the same idea on an Android phone,
-   as far as Android lets a normal app do it. Desk spike S-08 first; scope and AC-13 are
-   rewritten from its answer.
+7. **Android (after the macOS steps 1–4, before Windows step 5; user 2026-11-06)** — the same idea on an
+   Android phone, as far as Android lets a normal app do it. Desk spike S-08 first; scope and AC-13 are
+   rewritten from its answer. If S-08 shows a normal app cannot help, the step is dropped and Windows follows.
 
 ## Acceptance criteria
 
@@ -168,7 +169,7 @@ AC-13 (bonus, Android): placeholder until S-08. Shape: on a real Android phone, 
 ## Non-goals
 
 - Linux.
-- Android as part of v1 — it is a bonus step after v1 ships.
+- Android beyond what S-08 shows a normal app may do.
 - Picking a "better" network, captive-portal login, VPN awareness.
 - Recovering from failures beyond Wi-Fi (router down, ISP outage) — the app logs them
   and backs off, nothing more.
@@ -197,7 +198,7 @@ AC-13 (bonus, Android): placeholder until S-08. Shape: on a real Android phone, 
 - The degraded rule's thresholds are a guess (the user chose to design from what we know
   over a multi-day recorder, 2026-11-03); the signal context in every event is what tunes
   them after real use.
-- **S-08 (desk, before step 7):** what an Android app may do since Android 10 — reconnect a
+- **S-08 (desk, before step 7; now right after macOS):** what an Android app may do since Android 10 — reconnect a
   saved network, toggle Wi-Fi, read connection state (WifiManager, network suggestions,
   ConnectivityManager callbacks); Rust core via NDK/JNI vs. Kotlin; foreground service
   instead of a tray. To verify, not assumed.
