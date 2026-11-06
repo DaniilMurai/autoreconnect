@@ -228,6 +228,7 @@ Example lines:
 {"ts":"2026-11-03T14:06:40.000+01:00","health":"wifi_off_by_user","signal":null,"network":null,"event":"wifi_off_by_user"}
 {"ts":"2026-11-03T13:24:21.494+01:00","health":"upstream_down","signal":{"rssi_dbm":-37,"noise_dbm":-101,"tx_rate_mbps":173.0},"network":null,"event":"connectivity_lost","detail":{"to":"upstream_down"}}
 ```
+For `recovery_action`, `ts` is the action's start and `detail.duration_ms` its length (user, 2026-11-06; T-27).
 
 ## Public signatures
 
@@ -313,9 +314,9 @@ pub trait CredentialStore {
     fn put(&self, network: &NetworkId, secret: &Secret) -> Result<(), CredError>;
 }
 
-pub trait Prober {
+pub trait Prober: Send + Sync {
     fn probe(&self, kind: ProbeKind, targets: &ProbeTargets, timeout: Duration) -> ProbeResult;
-    /// Resolves the HTTP probe host; called only while healthy.
+    /// Resolves the HTTP probe host; called on a worker, the core waits at most `http_timeout` (T-27).
     fn resolve_http(&self) -> Option<std::net::SocketAddr>;
 }
 
@@ -327,7 +328,7 @@ pub trait LoginItem {
 pub struct Platform {
     pub wifi: Box<dyn WifiControl>,
     pub creds: Box<dyn CredentialStore>,
-    pub prober: Box<dyn Prober>,
+    pub prober: std::sync::Arc<dyn Prober>,
     pub login: Box<dyn LoginItem>,
 }
 ```

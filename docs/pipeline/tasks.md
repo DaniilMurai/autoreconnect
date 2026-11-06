@@ -205,7 +205,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop (user switches the router)
       Depends on: T-27
 
-- [ ] T-27 — HTTP target resolution never blocks the core loop
+- [x] T-27 — HTTP target resolution never blocks the core loop
       Files: src/core/run.rs, src/core/probe*.rs as needed
       Do: from T-14 (AC-2 FAIL ×2: no events at all under a full egress block). `probe()` calls `resolve_http()`
           (blocking `getaddrinfo`, no timeout) on the core thread; resolve on a worker with a deadline

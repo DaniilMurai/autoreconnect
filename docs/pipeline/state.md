@@ -1,8 +1,8 @@
 # State
 
 - Project: AutoReconnect (working name)
-- Current stage: 7 — implementation (done: T-01…T-14, T-19, T-24, T-25, T-26; code merged, checks left: T-16 AC-7/AC-8, T-22 dry read + Windows half)
-- Next: T-27 (HTTP resolve never blocks the core; fixes AC-2), T-28 (Degraded re-tune; fixes AC-14), then T-15 router, T-16 AC-7/AC-8, T-17, T-18; then Android: S-08b device spike (needs the user's phone + adb) → stage 6 tasks; Windows T-20/T-21 after Android
+- Current stage: 7 — implementation (done: T-01…T-14, T-19, T-24…T-27; code merged, checks left: T-16 AC-7/AC-8, T-22 dry read + Windows half)
+- Next: T-28 (Degraded re-tune; fixes AC-14), T-15 router, T-16 AC-7/AC-8, T-17, T-18 (all unblocked by T-27); then Android: S-08b device spike (needs the user's phone + adb) → stage 6 tasks; Windows T-20/T-21 after Android
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
@@ -86,3 +86,4 @@
 - 2026-11-06 (S-08): Android viable only as a sideloaded APK with targetSdk 28 (legacy WifiManager reassociate/disconnect/reconnect/setWifiEnabled still allowed on Android 10–17 per AOSP); Play (target ≥ 35) = detect-only → dropped. Android itself does not recover a Wi-Fi without internet (switches to mobile data). Device checks D1–D7 need a phone + adb (none on this Mac). Scope decision with the user pending.
 - 2026-11-06 (user, after S-08): Android = sideloaded targetSdk-28 APK, foreground service; Kotlin shell + Rust core (`cdylib`, cargo-ndk/JNI). plan.md step 7 and AC-13 rewritten from S-08. Next for Android: device spike S-08b (D1–D3) on the user's phone with adb, then stage 6 tasks from the S-08 list.
 - 2026-11-06 (T-14, merged): AC-1 PASS (CPU 0.10 %, footprint 14.6 MB), AC-4b PASS ×3, AC-5 PASS, AC-6 PASS; AC-2 FAIL ×2 (log has only `app_started`; orchestrator re-ran check_log.py ac2: FAIL) → T-27; AC-14 FAIL (degraded 53.6 s, flapping) → T-28. Network "Herbst - Mieter" (RSSI −76…−84). T-15 and T-16 now wait for T-27.
+- 2026-11-06 (T-27, merged): cause confirmed (blocking getaddrinfo on the core thread); HTTP resolve on a worker, 1.5 s deadline. Live AC-2 PASS drop (lost 7.6 s, action 7.6 s, restored 5.6 s) and return (8.4 / 8.4 / 1.7 s), re-checked by the orchestrator with check_log.py. `recovery_action.ts` = action start (user). Earlier attempts: one return run FAILed restore 13.8 s (power-cycle met the unblock, −80 dBm) → watch item for AC-2 on weak networks. Proposal pending: `ac2.sh` waits for `app_started` instead of a fixed 12 s.
