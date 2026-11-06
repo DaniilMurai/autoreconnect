@@ -72,9 +72,9 @@ Common ground for all ACs:
 - Thresholds below are the proposed defaults; changing one is a decision for `decisions.md`.
 
 AC-1: Given — a Mac on healthy Wi-Fi, the release build running for 10 minutes.
-      When — `ps -o %cpu=,rss= -p $(pgrep -x autoreconnect)` is sampled every 10 s for
-      10 minutes, and `ls -l` is run on the release binary.
-      Then — mean CPU < 0.5 %, max RSS < 60 MB, binary < 10 MB, and the event log has zero
+      When — `ps -o %cpu= -p $(pgrep -x autoreconnect)` and `footprint $(pgrep -x autoreconnect)`
+      (`phys_footprint`) are sampled every 10 s for 10 minutes, and `ls -l` is run on the release binary.
+      Then — mean CPU < 0.5 %, max physical footprint < 60 MB, binary < 10 MB, and the event log has zero
       `recovery_action` lines for that window.
 
 AC-2: Given — the app running on associated Wi-Fi with working internet.
