@@ -1,0 +1,14 @@
+== ac2-return 2026-11-06 12:59:03  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac2-return-125903
+app pid 72012 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+if the block ever gets stuck: sudo pfctl -a com.apple/autoreconnect -F rules
+rule: block return out quick on en0 all
+blocked 12:59:19
+unblocked 12:59:59
+ONLINE 13:00:02, 3 s after the reference time
+"ts":"2026-11-06T12:59:05.240768+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+AC-2: FAIL
+  FAIL connectivity_lost after block: missing (limit 10 s)
+  FAIL first recovery_action after block: missing (limit 15 s)
+  FAIL connectivity_restored after unblock: missing (limit 10 s)
+  first action: not reassociate (expected reassociate while associated)
+RESULT: FAIL

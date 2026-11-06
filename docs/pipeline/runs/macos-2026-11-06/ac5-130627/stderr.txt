@@ -1,0 +1,16 @@
+credential "Herbst - Mieter": own copy, 8 bytes
+probe Dns Ok 30 ms
+probe Dns Ok 36 ms
+probe Dns Ok 30 ms
+probe Dns Ok 31 ms
+probe Dns Ok 43 ms
+wifi events [PowerChanged, NetworkChanged], link PoweredOff
+wifi events [LinkChanged], link PoweredOff
+wifi events [NetworkChanged], link PoweredOff
+wifi events [PowerChanged], link PoweredOff
+wifi events [PowerChanged], link Disassociated
+wifi events [PowerChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -78, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+probe Dns Ok 60 ms
+wifi events [LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -75, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+probe Dns Ok 30 ms
+probe Dns Ok 27 ms

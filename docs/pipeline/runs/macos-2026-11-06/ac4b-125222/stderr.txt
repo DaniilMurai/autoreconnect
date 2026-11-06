@@ -1,0 +1,40 @@
+credential "Herbst - Mieter": own copy, 8 bytes
+probe Dns Ok 40 ms
+probe Dns Ok 30 ms
+probe Dns Ok 33 ms
+probe Dns Ok 35 ms
+probe Dns Ok 33 ms
+link poll saw a change: Associated { network: None, bssid: None, signal: Signal { rssi_dbm: -76, noise_dbm: -96, tx_rate_mbps: 103.0 } }
+probe skipped, link Disassociated
+wifi events [NetworkChanged, LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -77, noise_dbm: -96, tx_rate_mbps: 0.0 } }
+probe Dns Ok 195 ms
+wifi events [NetworkChanged, LinkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -75, noise_dbm: -96, tx_rate_mbps: 0.0 } }
+probe Dns Ok 83 ms
+probe Dns Ok 29 ms
+probe Dns Ok 35 ms
+probe Dns Ok 30 ms
+probe Http Ok 49 ms
+probe Dns Ok 29 ms
+probe Dns Ok 45 ms
+wifi events [NetworkChanged], link Disassociated
+wifi events [LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -77, noise_dbm: -96, tx_rate_mbps: 0.0 } }
+probe Dns Ok 42 ms
+wifi events [LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -77, noise_dbm: -96, tx_rate_mbps: 0.0 } }
+probe Dns Ok 111 ms
+probe Dns Ok 39 ms
+probe Dns Ok 51 ms
+probe Dns Ok 37 ms
+probe Dns Ok 41 ms
+probe Dns Ok 45 ms
+probe Http Ok 71 ms
+wifi events [NetworkChanged], link Disassociated
+wifi events [LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -76, noise_dbm: -97, tx_rate_mbps: 0.0 } }
+probe Dns Ok 134 ms
+wifi events [LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("82:fe:ce:2c:9e:a0"), signal: Signal { rssi_dbm: -76, noise_dbm: -97, tx_rate_mbps: 0.0 } }
+probe Dns Ok 77 ms
+probe Dns Ok 37 ms
+probe Dns Ok 30 ms
+probe Dns Ok 40 ms
+probe Dns Ok 37 ms
+probe Dns Ok 36 ms
+probe Dns Ok 32 ms

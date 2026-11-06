@@ -1,0 +1,16 @@
+== ac5 2026-11-06 13:06:27  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac5-130627
+app pid 72313 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+wifi off 13:06:43
+after 120 s: Wi-Fi Power (en0): Off
+wifi on 13:08:43
+ONLINE 13:08:45, 2 s after the reference time
+"ts":"2026-11-06T13:06:29.365318+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+"ts":"2026-11-06T13:06:43.614646+01:00", "event":"wifi_off_by_user"
+"ts":"2026-11-06T13:08:43.778024+01:00", "event":"wifi_on_by_user"
+"ts":"2026-11-06T13:08:44.365128+01:00", "event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":586,"error":null}
+AC-5: PASS
+  ok   wifi_off_by_user logged: 0.6 s after power-off
+  ok   held off long enough: 120 s (need 120)
+  ok   recovery_action while off: 0 (limit 0)
+  ok   still off after 2 min
+RESULT: PASS

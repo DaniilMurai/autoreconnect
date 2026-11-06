@@ -1,0 +1,29 @@
+== ac4b 2026-11-06 12:52:22  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac4b-125222
+app pid 71591 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+run 1: dropped 12:52:38
+ONLINE 12:52:43, 5 s after the reference time
+run 2: dropped 12:53:04
+ONLINE 12:53:07, 3 s after the reference time
+run 3: dropped 12:53:27
+ONLINE 12:53:32, 5 s after the reference time
+"ts":"2026-11-06T12:52:23.867387+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+"ts":"2026-11-06T12:52:38.544994+01:00", "event":"connectivity_lost","detail":{"to":"not_associated"}
+"ts":"2026-11-06T12:52:42.817158+01:00", "event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":4271,"error":null}
+"ts":"2026-11-06T12:52:43.119303+01:00", "event":"connectivity_restored","detail":{"downtime_ms":4573}
+"ts":"2026-11-06T12:53:04.289623+01:00", "event":"connectivity_lost","detail":{"to":"not_associated"}
+"ts":"2026-11-06T12:53:07.071877+01:00", "event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":2781,"error":null}
+"ts":"2026-11-06T12:53:07.247932+01:00", "event":"connectivity_restored","detail":{"downtime_ms":2958}
+"ts":"2026-11-06T12:53:28.142957+01:00", "event":"connectivity_lost","detail":{"to":"not_associated"}
+"ts":"2026-11-06T12:53:31.257533+01:00", "event":"recovery_action","detail":{"kind":"rejoin","ok":true,"duration_ms":3113,"error":null}
+"ts":"2026-11-06T12:53:31.45713+01:00", "event":"connectivity_restored","detail":{"downtime_ms":3314}
+AC-4b: PASS
+  ok   run 1 rejoin recovery_action succeeded: yes
+  ok   run 1 rejoin logged after drop: 4.8 s (limit 10 s)
+  ok   run 1 connectivity_restored after drop: 5.1 s (limit 12 s)
+  ok   run 2 rejoin recovery_action succeeded: yes
+  ok   run 2 rejoin logged after drop: 3.1 s (limit 10 s)
+  ok   run 2 connectivity_restored after drop: 3.2 s (limit 12 s)
+  ok   run 3 rejoin recovery_action succeeded: yes
+  ok   run 3 rejoin logged after drop: 4.3 s (limit 10 s)
+  ok   run 3 connectivity_restored after drop: 4.5 s (limit 12 s)
+RESULT: PASS

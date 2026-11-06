@@ -1,0 +1,6 @@
+{"ts":"2026-11-06T13:01:53.625715+01:00","health":"unknown","signal":{"rssi_dbm":-80,"noise_dbm":-97,"tx_rate_mbps":103.0},"network":"Herbst - Mieter","event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}}
+{"ts":"2026-11-06T13:03:00.614513+01:00","health":"degraded","signal":{"rssi_dbm":-76,"noise_dbm":-97,"tx_rate_mbps":97.0},"network":"Herbst - Mieter","event":"connection_degraded","detail":{"failed":3,"slow":0,"window":6}}
+{"ts":"2026-11-06T13:03:15.30188+01:00","health":"degraded","signal":{"rssi_dbm":-76,"noise_dbm":-97,"tx_rate_mbps":97.0},"network":"Herbst - Mieter","event":"recovery_action","detail":{"kind":"reassociate","ok":true,"duration_ms":14686,"error":null}}
+{"ts":"2026-11-06T13:03:30.733242+01:00","health":"healthy","signal":{"rssi_dbm":-79,"noise_dbm":-98,"tx_rate_mbps":51.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":30118}}
+{"ts":"2026-11-06T13:04:16.861354+01:00","health":"degraded","signal":{"rssi_dbm":-79,"noise_dbm":-98,"tx_rate_mbps":97.0},"network":"Herbst - Mieter","event":"connection_degraded","detail":{"failed":3,"slow":0,"window":6}}
+{"ts":"2026-11-06T13:04:26.902732+01:00","health":"healthy","signal":{"rssi_dbm":-83,"noise_dbm":-98,"tx_rate_mbps":51.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":10041}}

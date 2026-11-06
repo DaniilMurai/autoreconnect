@@ -1,0 +1,2 @@
+event log: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac1-131357/events.jsonl
+{"ts":"2026-11-06T13:13:58.600469+01:00","health":"unknown","signal":{"rssi_dbm":-76,"noise_dbm":-96,"tx_rate_mbps":103.0},"network":"Herbst - Mieter","event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}}

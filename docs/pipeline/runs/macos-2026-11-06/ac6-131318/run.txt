@@ -1,0 +1,14 @@
+== ac6 2026-11-06 13:13:18  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac6-131318
+app pid 72893 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+  ok   owner now: daniilmurai (logged-in user daniilmurai)
+  ok   recovery runs found: 4
+  ok   ac14-130152 owner: daniilmurai
+  ok   ac14-130152 credential imports during recovery: 0
+  ok   ac2-drop-125653 owner: daniilmurai
+  ok   ac2-drop-125653 credential imports during recovery: 0
+  ok   ac2-return-125903 owner: daniilmurai
+  ok   ac2-return-125903 credential imports during recovery: 0
+  ok   ac4b-125222 owner: daniilmurai
+  ok   ac4b-125222 credential imports during recovery: 0
+Did any password, admin or Location prompt appear during the AC-2/AC-4b/AC-14 runs? [y/n]   ok   no prompt seen during recovery (user)
+RESULT: PASS
