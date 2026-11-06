@@ -1,0 +1,3 @@
+rule: block drop out quick on en0 all
+blocked 15:34:46
+unblocked 15:35:26

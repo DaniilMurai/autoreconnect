@@ -1,0 +1,40 @@
+15:43:59.753 credential "Herbst - Mieter": own copy, 8 bytes
+15:43:59.834 probe Dns Ok 33 ms
+15:44:02.925 probe Dns Ok 42 ms
+15:44:06.027 probe Dns Ok 56 ms
+15:44:09.101 probe Dns Ok 31 ms
+15:44:12.216 probe Dns Ok 65 ms
+15:44:17.264 probe Dns Timeout 2001 ms
+15:44:18.792 resolve timed out after 1500 ms
+15:44:20.326 resolve timed out after 1502 ms
+15:44:21.373 probe Gateway Timeout 1004 ms
+15:44:26.358 wifi events [NetworkChanged, LinkChanged, NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -77, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:44:28.443 probe Dns Timeout 2001 ms
+15:44:29.482 probe Gateway Timeout 1001 ms
+15:44:29.510 wifi events [NetworkChanged, LinkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -76, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:44:31.528 probe Dns Timeout 2000 ms
+15:44:32.597 probe Gateway Timeout 1002 ms
+15:44:33.645 probe Http Refused 0 ms
+15:44:34.677 probe Gateway Timeout 1010 ms
+15:44:35.725 probe Http Refused 0 ms
+15:44:36.746 probe Gateway Timeout 1002 ms
+15:44:37.796 probe Http Refused 0 ms
+15:44:38.813 probe Gateway Timeout 1000 ms
+15:44:39.863 probe Http Refused 0 ms
+15:44:40.879 probe Gateway Timeout 1001 ms
+15:44:41.934 probe Http Refused 0 ms
+15:44:42.978 probe Gateway Timeout 1011 ms
+15:44:44.019 probe Http Refused 0 ms
+15:44:45.045 probe Gateway Timeout 1011 ms
+15:44:46.091 probe Http Refused 0 ms
+15:44:47.111 probe Gateway Timeout 1001 ms
+15:44:48.217 probe Http Refused 0 ms
+15:44:49.236 probe Gateway Timeout 1002 ms
+15:44:50.277 probe Http Refused 0 ms
+15:44:51.304 probe Gateway Timeout 1009 ms
+15:44:52.352 probe Http Refused 0 ms
+15:44:53.401 probe Gateway Timeout 1005 ms
+15:44:54.676 probe Http Ok 228 ms
+15:44:57.779 probe Dns Ok 57 ms
+15:45:00.856 probe Dns Ok 32 ms
+15:45:03.957 probe Dns Ok 52 ms
