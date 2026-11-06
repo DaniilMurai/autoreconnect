@@ -168,7 +168,7 @@ impl HttpResolver {
 impl Core {
     fn trace(&self, line: fmt::Arguments) {
         if self.trace {
-            let ts = time::OffsetDateTime::now_utc().to_offset(self.cfg.utc_offset);
+            let ts = self.now();
             let (h, m, s, ms) = (ts.hour(), ts.minute(), ts.second(), ts.millisecond());
             eprintln!("{h:02}:{m:02}:{s:02}.{ms:03} {line}");
         }
@@ -359,6 +359,8 @@ impl Core {
 
     fn act(&mut self, kind: RecoveryKind) -> Step {
         let t = Instant::now();
+        // AC-2 times the action from its start; a join on a weak signal took 13 s (T-27 live run).
+        let started = self.now();
         let result = match kind {
             _ if self.dry_run => Err(WifiError::Platform { code: 0, message: "dry_run".into() }),
             RecoveryKind::PowerCycle => self.power_cycle(),
@@ -375,7 +377,7 @@ impl Core {
                 other => format!("{other:?}"),
             }),
         };
-        self.log(self.policy.health(), event);
+        self.log_at(started, self.policy.health(), event);
         self.publish();
         self.policy.on_action_done(kind, &result, Instant::now())
     }
@@ -411,12 +413,20 @@ impl Core {
         self.platform.wifi.set_power(true)
     }
 
+    fn now(&self) -> time::OffsetDateTime {
+        time::OffsetDateTime::now_utc().to_offset(self.cfg.utc_offset)
+    }
+
     fn log(&mut self, health: Health, kind: EventKind) {
+        let ts = self.now();
+        self.log_at(ts, health, kind);
+    }
+
+    fn log_at(&mut self, ts: time::OffsetDateTime, health: Health, kind: EventKind) {
         let (signal, network) = match &self.link {
             LinkState::Associated { signal, network, .. } => (Some(*signal), network.as_ref().map(|n| n.ssid.clone())),
             _ => (None, None),
         };
-        let ts = time::OffsetDateTime::now_utc().to_offset(self.cfg.utc_offset);
         let event = Event { ts, health, signal, network, kind };
         if let Err(e) = self.sink.write(&event) {
             eprintln!("event log write failed: {e}");
@@ -480,6 +490,7 @@ mod tests {
         deliver_events: bool,
         joins: Arc<Mutex<Vec<Join>>>,
         join_result: Arc<Mutex<Result<(), WifiError>>>,
+        join_delay: Duration,
     }
 
     /// Mode and password of one `join` call.
@@ -501,6 +512,7 @@ mod tests {
                 deliver_events,
                 joins: Default::default(),
                 join_result: Arc::new(Mutex::new(Ok(()))),
+                join_delay: Duration::ZERO,
             }
         }
 
@@ -525,6 +537,7 @@ mod tests {
         }
         fn join(&mut self, network: &NetworkId, mode: JoinMode, password: Option<&Secret>) -> Result<(), WifiError> {
             self.joins.lock().unwrap().push((mode, password.map(|p| p.expose().to_string())));
+            thread::sleep(self.join_delay);
             let result = self.join_result.lock().unwrap().clone();
             if result.is_ok() {
                 *self.link.lock().unwrap() = associated(Some(&network.ssid));
@@ -625,10 +638,11 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
-    struct MemSink(Arc<Mutex<Vec<(Instant, EventKind)>>>);
+    struct MemSink(Arc<Mutex<Vec<(Instant, EventKind)>>>, Arc<Mutex<Vec<Event>>>);
 
     impl EventSink for MemSink {
         fn write(&mut self, event: &Event) -> std::io::Result<()> {
+            self.1.lock().unwrap().push(event.clone());
             self.0.lock().unwrap().push((Instant::now(), event.kind.clone()));
             Ok(())
         }
@@ -755,11 +769,8 @@ mod tests {
         assert!(!ks.iter().any(|k| matches!(k, EventKind::RecoveryAction { .. })), "{ks:?}");
     }
 
-    #[test]
-    fn associated_and_lost_reassociates_with_a_fresh_scan() {
-        // Policy picks the action; this checks `run` maps it to the right join.
-        let wifi = FakeWifi::new(associated(Some("Home")), true);
-        let mut core = Core {
+    fn bare_core(wifi: &FakeWifi, sink: &MemSink) -> Core {
+        Core {
             policy: Policy::new(Config::default()),
             platform: Platform {
                 wifi: Box::new(wifi.clone()),
@@ -767,7 +778,7 @@ mod tests {
                 prober: Arc::new(OkProber),
             },
             cfg: Config::default(),
-            sink: Box::new(MemSink::default()),
+            sink: Box::new(sink.clone()),
             publish: Box::new(|_| {}),
             link: associated(Some("Home")),
             targets: ProbeTargets::default(),
@@ -782,11 +793,36 @@ mod tests {
             dry_run: false,
             commands: never(),
             events: never(),
-        };
+        }
+    }
+
+    #[test]
+    fn associated_and_lost_reassociates_with_a_fresh_scan() {
+        // Policy picks the action; this checks `run` maps it to the right join.
+        let wifi = FakeWifi::new(associated(Some("Home")), true);
+        let mut core = bare_core(&wifi, &MemSink::default());
         core.ensure_credential();
         core.remember();
         core.act(RecoveryKind::Reassociate);
         assert_eq!(*wifi.joins.lock().unwrap(), vec![(JoinMode::FreshScanStrongest, Some("pw".into()))]);
+    }
+
+    #[test]
+    fn recovery_action_is_stamped_with_its_start() {
+        let wifi = FakeWifi { join_delay: Duration::from_millis(600), ..FakeWifi::new(associated(Some("Home")), true) };
+        let sink = MemSink::default();
+        let mut core = bare_core(&wifi, &sink);
+        core.ensure_credential();
+        core.remember();
+        let before = core.now();
+        core.act(RecoveryKind::Reassociate);
+        let after = core.now();
+        let events = sink.1.lock().unwrap();
+        let action = events.iter().find(|e| matches!(e.kind, EventKind::RecoveryAction { .. })).expect("no recovery_action");
+        let EventKind::RecoveryAction { duration_ms, .. } = action.kind else { unreachable!() };
+        assert!(duration_ms >= 600, "{duration_ms}");
+        assert!(action.ts - before < time::Duration::milliseconds(100), "ts {} vs start {before}", action.ts);
+        assert!(after - action.ts >= time::Duration::milliseconds(600));
     }
 
     #[test]
