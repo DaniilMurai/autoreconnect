@@ -1,12 +1,18 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{Receiver, never, select};
+use crossbeam_channel::{Receiver, RecvTimeoutError, TryRecvError, never, select};
 
 use super::events::{Event, EventKind, EventSink};
-use super::model::{CredError, Health, LinkEvent, LinkState, NetworkId, Observation, ProbeKind, RecoveryKind, WifiError};
+use super::model::{
+    CredError, Health, LinkEvent, LinkState, NetworkId, Observation, ProbeKind, ProbeOutcome, ProbeResult, RecoveryKind, WifiError,
+};
 use super::policy::{Config, NextAction, Policy, Step};
+use super::probe::Prober;
 use crate::platform::{JoinMode, PermissionState, Platform};
 use crate::ui::tray::{UiCommand, UiModel};
 
@@ -21,8 +27,9 @@ pub fn run_core(
     let (events_tx, events) = crossbeam_channel::unbounded();
     let subscribed = platform.wifi.subscribe(events_tx);
     let link = platform.wifi.link().unwrap_or(LinkState::Disassociated);
-    let mut targets = platform.wifi.probe_targets();
-    targets.http_addr = platform.prober.resolve_http();
+    let targets = platform.wifi.probe_targets();
+    let mut resolver = HttpResolver { prober: platform.prober.clone(), pending: None };
+    resolver.start();
     let mut core = Core {
         policy: Policy::new(cfg.clone()),
         platform,
@@ -31,6 +38,7 @@ pub fn run_core(
         publish,
         link,
         targets,
+        resolver,
         published: None,
         credentials: HashMap::new(),
         reimport: HashSet::new(),
@@ -96,6 +104,7 @@ struct Core {
     publish: Box<dyn Fn(UiModel) + Send>,
     link: LinkState,
     targets: super::model::ProbeTargets,
+    resolver: HttpResolver,
     published: Option<Health>,
     /// Networks already looked up this run, and whether a password was found.
     credentials: HashMap<NetworkId, bool>,
@@ -112,7 +121,59 @@ struct Core {
     events: Receiver<LinkEvent>,
 }
 
+/// `getaddrinfo` has no timeout and hangs for as long as all egress is blocked (T-27), so it runs
+/// on a worker and the core waits at most a deadline. At most one lookup is in flight.
+struct HttpResolver {
+    prober: Arc<dyn Prober>,
+    pending: Option<Receiver<Option<SocketAddr>>>,
+}
+
+impl HttpResolver {
+    fn start(&mut self) {
+        if self.pending.is_some() {
+            return;
+        }
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        let prober = self.prober.clone();
+        thread::spawn(move || {
+            let _ = tx.send(prober.resolve_http());
+        });
+        self.pending = Some(rx);
+    }
+
+    /// The answer of a lookup that has finished; `None` while one is still running or none was started.
+    fn finished(&mut self) -> Option<Option<SocketAddr>> {
+        let answer = match self.pending.as_ref()?.try_recv() {
+            Ok(answer) => answer,
+            Err(TryRecvError::Empty) => return None,
+            Err(TryRecvError::Disconnected) => None,
+        };
+        self.pending = None;
+        Some(answer)
+    }
+
+    /// Starts a lookup unless one is running and waits up to `deadline`; `Err` = it did not answer in time.
+    fn resolve(&mut self, deadline: Duration) -> Result<Option<SocketAddr>, ()> {
+        self.start();
+        let answer = match self.pending.as_ref().map(|rx| rx.recv_timeout(deadline)) {
+            Some(Ok(answer)) => answer,
+            Some(Err(RecvTimeoutError::Timeout)) => return Err(()),
+            Some(Err(RecvTimeoutError::Disconnected)) | None => None,
+        };
+        self.pending = None;
+        Ok(answer)
+    }
+}
+
 impl Core {
+    fn trace(&self, line: fmt::Arguments) {
+        if self.trace {
+            let ts = time::OffsetDateTime::now_utc().to_offset(self.cfg.utc_offset);
+            let (h, m, s, ms) = (ts.hour(), ts.minute(), ts.second(), ts.millisecond());
+            eprintln!("{h:02}:{m:02}:{s:02}.{ms:03} {line}");
+        }
+    }
+
     /// Sleeps for `after` unless a UI command or a link change comes first. The link is also read
     /// every `link_poll_interval`, in case CoreWLAN stops delivering events.
     fn wait(&mut self, after: Duration) -> Wake {
@@ -133,9 +194,7 @@ impl Core {
                     Ok(event) => {
                         let burst: Vec<_> = std::iter::once(event).chain(self.events.try_iter()).collect();
                         let link = self.platform.wifi.link().unwrap_or(LinkState::Disassociated);
-                        if self.trace {
-                            eprintln!("wifi events {burst:?}, link {link:?}");
-                        }
+                        self.trace(format_args!("wifi events {burst:?}, link {link:?}"));
                         return Wake::Link(link);
                     }
                     Err(_) => self.events = never(),
@@ -143,9 +202,7 @@ impl Core {
                 default(tick) => {
                     let link = self.platform.wifi.link().unwrap_or(LinkState::Disassociated);
                     if !same_link(&link, &self.link) {
-                        if self.trace {
-                            eprintln!("link poll saw a change: {link:?}");
-                        }
+                        self.trace(format_args!("link poll saw a change: {link:?}"));
                         return Wake::Link(link);
                     }
                 }
@@ -181,9 +238,7 @@ impl Core {
         let own = if self.reimport.contains(&network) { Ok(None) } else { self.platform.creds.get(&network) };
         let found = match own {
             Ok(Some(secret)) => {
-                if self.trace {
-                    eprintln!("credential {:?}: own copy, {} bytes", network.ssid, secret.expose().len());
-                }
+                self.trace(format_args!("credential {:?}: own copy, {} bytes", network.ssid, secret.expose().len()));
                 true
             }
             Ok(None) if self.policy.health() == Health::NoInternet => return,
@@ -207,7 +262,7 @@ impl Core {
             Ok(secret) => {
                 if self.trace {
                     let same = matches!(creds.get(network), Ok(Some(s)) if s.expose() == secret.expose());
-                    eprintln!("credential {:?}: imported, own copy matches: {same}", network.ssid);
+                    self.trace(format_args!("credential {:?}: imported, own copy matches: {same}", network.ssid));
                 }
                 self.log(self.policy.health(), EventKind::CredentialImported);
                 true
@@ -234,8 +289,7 @@ impl Core {
             Ok(Some(network)) => self.last_network = Some(network),
             Ok(None) => {}
             Err(WifiError::NeedsLocation) => self.location_missing(),
-            Err(e) if self.trace => eprintln!("remember_current: {e:?}"),
-            Err(_) => {}
+            Err(e) => self.trace(format_args!("remember_current: {e:?}")),
         }
     }
 
@@ -274,8 +328,20 @@ impl Core {
             *t = self.platform.wifi.probe_targets();
             t.http_addr = http_addr;
         }
+        if let Some(answer) = self.resolver.finished() {
+            t.http_addr = answer.or(t.http_addr);
+        }
         if kind == ProbeKind::Http && matches!(self.policy.health(), Health::Healthy | Health::Unknown) {
-            t.http_addr = self.platform.prober.resolve_http().or(t.http_addr);
+            let started = Instant::now();
+            match self.resolver.resolve(self.cfg.http_timeout) {
+                Ok(answer) => self.targets.http_addr = answer.or(self.targets.http_addr),
+                // No answer within the probe's own budget says the same as a probe timeout.
+                Err(()) => {
+                    let probe = ProbeResult { kind, started, rtt: started.elapsed(), outcome: ProbeOutcome::Timeout };
+                    self.trace(format_args!("resolve timed out after {} ms", probe.rtt.as_millis()));
+                    return self.policy.on_observation(&Observation { at: Instant::now(), link: self.link.clone(), probe: Some(probe) });
+                }
+            }
         }
         let timeout = match kind {
             ProbeKind::Dns => self.cfg.dns_timeout,
@@ -284,11 +350,9 @@ impl Core {
         };
         let probe = matches!(self.link, LinkState::Associated { .. })
             .then(|| self.platform.prober.probe(kind, &self.targets, timeout));
-        if self.trace {
-            match &probe {
-                Some(p) => eprintln!("probe {:?} {:?} {} ms", p.kind, p.outcome, p.rtt.as_millis()),
-                None => eprintln!("probe skipped, link {:?}", self.link),
-            }
+        match &probe {
+            Some(p) => self.trace(format_args!("probe {:?} {:?} {} ms", p.kind, p.outcome, p.rtt.as_millis())),
+            None => self.trace(format_args!("probe skipped, link {:?}", self.link)),
         }
         self.policy.on_observation(&Observation { at: Instant::now(), link: self.link.clone(), probe })
     }
@@ -400,13 +464,13 @@ fn reason(e: &CredError) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use std::sync::{Arc, Mutex};
 
     use crossbeam_channel::Sender;
 
     use super::*;
-    use crate::core::model::{ProbeOutcome, ProbeResult, ProbeTargets, Signal};
-    use crate::core::probe::Prober;
+    use crate::core::model::{ProbeTargets, Signal};
     use crate::platform::{CredentialStore, JoinMode, Secret, WifiControl};
 
     #[derive(Clone)]
@@ -534,6 +598,32 @@ mod tests {
         }
     }
 
+    /// Under an outage every probe times out and `resolve_http` hangs like `getaddrinfo` under a pf block.
+    #[derive(Clone, Default)]
+    struct OutageProber {
+        outage: Arc<AtomicBool>,
+        resolves: Arc<AtomicU32>,
+    }
+
+    impl Prober for OutageProber {
+        fn probe(&self, kind: ProbeKind, _: &ProbeTargets, timeout: Duration) -> ProbeResult {
+            let started = Instant::now();
+            if self.outage.load(Ordering::SeqCst) {
+                thread::sleep(timeout);
+                return ProbeResult { kind, started, rtt: timeout, outcome: ProbeOutcome::Timeout };
+            }
+            ProbeResult { kind, started, rtt: Duration::from_millis(5), outcome: ProbeOutcome::Ok }
+        }
+        fn resolve_http(&self) -> Option<std::net::SocketAddr> {
+            self.resolves.fetch_add(1, Ordering::SeqCst);
+            if self.outage.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_secs(60));
+                return None;
+            }
+            Some("17.253.0.1:80".parse().unwrap())
+        }
+    }
+
     #[derive(Clone, Default)]
     struct MemSink(Arc<Mutex<Vec<(Instant, EventKind)>>>);
 
@@ -569,13 +659,22 @@ mod tests {
     }
 
     fn start(wifi: &FakeWifi, creds: Box<dyn CredentialStore + Send>) -> (MemSink, impl FnOnce()) {
+        let cfg = Config { healthy_probe_interval: Duration::from_secs(30), ..Config::default() };
+        start_with(wifi, creds, Arc::new(OkProber), cfg)
+    }
+
+    fn start_with(
+        wifi: &FakeWifi,
+        creds: Box<dyn CredentialStore + Send>,
+        prober: Arc<dyn Prober>,
+        cfg: Config,
+    ) -> (MemSink, impl FnOnce()) {
         let sink = MemSink::default();
         let (commands_tx, commands) = crossbeam_channel::unbounded();
         let core = {
             let (wifi, sink) = (wifi.clone(), sink.clone());
             thread::spawn(move || {
-                let platform = Platform { wifi: Box::new(wifi), creds, prober: Box::new(OkProber) };
-                let cfg = Config { healthy_probe_interval: Duration::from_secs(30), ..Config::default() };
+                let platform = Platform { wifi: Box::new(wifi), creds, prober };
                 run_core(platform, cfg, Box::new(sink), PermissionState::Granted, commands, Box::new(|_| {}));
             })
         };
@@ -665,13 +764,14 @@ mod tests {
             platform: Platform {
                 wifi: Box::new(wifi.clone()),
                 creds: Box::new(FakeCreds { own: Arc::new(Mutex::new(Some("pw".into()))), ..FakeCreds::default() }),
-                prober: Box::new(OkProber),
+                prober: Arc::new(OkProber),
             },
             cfg: Config::default(),
             sink: Box::new(MemSink::default()),
             publish: Box::new(|_| {}),
             link: associated(Some("Home")),
             targets: ProbeTargets::default(),
+            resolver: HttpResolver { prober: Arc::new(OkProber), pending: None },
             published: None,
             credentials: HashMap::new(),
             reimport: HashSet::new(),
@@ -687,6 +787,30 @@ mod tests {
         core.remember();
         core.act(RecoveryKind::Reassociate);
         assert_eq!(*wifi.joins.lock().unwrap(), vec![(JoinMode::FreshScanStrongest, Some("pw".into()))]);
+    }
+
+    #[test]
+    fn hanging_resolve_does_not_stall_loss_detection() {
+        let wifi = FakeWifi::new(associated(Some("Home")), true);
+        let prober = OutageProber::default();
+        let (sink, stop) = start_with(&wifi, Box::new(NoCreds), Arc::new(prober.clone()), Config::default());
+        let blocked_at = Instant::now();
+        prober.outage.store(true, Ordering::SeqCst);
+        let lost_at = loop {
+            let found = sink.0.lock().unwrap().iter().find(|(_, k)| matches!(k, EventKind::ConnectivityLost { .. })).map(|(t, _)| *t);
+            if let Some(t) = found {
+                break t;
+            }
+            assert!(blocked_at.elapsed() < Duration::from_secs(10), "no connectivity_lost in 10 s: {:?}", kinds(&sink));
+            thread::sleep(Duration::from_millis(20));
+        };
+        let latency = lost_at - blocked_at;
+        // One hung resolve at a time: a new worker per probe would pile up threads for the whole outage.
+        let resolves = prober.resolves.load(Ordering::SeqCst);
+        stop();
+        eprintln!("connectivity_lost {latency:?} after the block, {resolves} resolves");
+        assert!(latency <= Duration::from_secs(10), "{latency:?}");
+        assert!(resolves <= 2, "{resolves} resolves started");
     }
 
     #[test]

@@ -7,7 +7,8 @@ use socket2::{Domain, Protocol, Socket, Type};
 
 use super::model::{ProbeKind, ProbeOutcome, ProbeResult, ProbeTargets};
 
-pub trait Prober {
+/// `Send + Sync`: the core runs `resolve_http` on a worker thread.
+pub trait Prober: Send + Sync {
     fn probe(&self, kind: ProbeKind, targets: &ProbeTargets, timeout: Duration) -> ProbeResult;
     fn resolve_http(&self) -> Option<SocketAddr>;
 }
@@ -62,8 +63,17 @@ impl NetProber {
         if let Err(e) = sock.set_read_timeout(Some(timeout)).and(sock.send_to(&query, (resolver, 53)).map(|_| ())) {
             return io_outcome(&e);
         }
+        // Each stray datagram restarts the socket timeout, so the loop keeps its own deadline.
+        let deadline = Instant::now() + timeout;
         let mut buf = [0u8; 512];
         loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return ProbeOutcome::Timeout;
+            }
+            if let Err(e) = sock.set_read_timeout(Some(left)) {
+                return io_outcome(&e);
+            }
             let n = match sock.recv(&mut buf) {
                 Ok(n) => n,
                 Err(e) => return io_outcome(&e),
