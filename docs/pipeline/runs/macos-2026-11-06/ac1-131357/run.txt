@@ -1,0 +1,70 @@
+== ac1 2026-11-06 13:13:57  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/docs/pipeline/runs/macos-2026-11-06/ac1-131357
+app pid 73032 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+10,0.0,14484344
+20,0.1,14386040
+30,0.0,14402424
+40,0.0,14074744
+50,0.0,14091128
+60,0.2,14123896
+70,0.1,14140280
+80,0.4,14156664
+90,0.3,14189432
+100,0.1,14222200
+110,0.0,14254968
+120,0.1,14254968
+130,0.0,14304120
+140,0.0,14320504
+150,0.0,14336888
+160,0.1,14353272
+170,0.4,14402424
+180,0.0,14402424
+190,0.0,14435192
+200,0.0,14435192
+210,0.3,14467960
+220,0.1,14500728
+230,0.0,14517112
+240,0.0,14533496
+250,0.1,14549880
+260,0.1,14582648
+270,0.3,14615416
+280,0.0,14615416
+290,0.0,14648184
+300,0.0,14664568
+310,0.1,14697336
+320,0.4,14713720
+330,0.0,14730104
+340,0.0,14762872
+350,0.0,14795640
+360,0.1,14795640
+370,0.2,14828408
+380,0.1,14828408
+390,0.6,14877560
+400,0.0,14893944
+410,0.0,14910328
+420,0.0,14926712
+430,0.2,14975864
+440,0.3,15008632
+450,0.0,15025016
+460,0.0,15041400
+470,0.0,15074168
+480,0.2,15090552
+490,0.0,15106936
+500,0.0,15123320
+510,0.1,15172472
+520,0.1,15172472
+530,0.2,15205240
+540,0.0,15205240
+550,0.0,15254392
+560,0.0,15254392
+570,0.1,15270776
+580,0.7,15287160
+590,0.0,15319928
+600,0.0,15336312
+-rwxr-xr-x@ 1 daniilmurai  staff  2029312  6 Nov 12:27 /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t14-ac-runs-e709b1/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+AC-1: PASS
+  ok   samples: 60 cpu, 60 footprint (need 60)
+  ok   mean CPU: 0.10 % (limit 0.5), max 0.7 %
+  ok   max physical footprint: 14.6 MB (limit 60), min 13.4 MB
+  ok   binary size: 1.94 MB (limit 10)
+  ok   recovery_action lines: 0 (limit 0)
+RESULT: PASS
