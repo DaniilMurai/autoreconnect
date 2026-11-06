@@ -148,10 +148,10 @@ def ac4b(events, clock, a):
         r.require(f"run {i + 1} rejoin recovery_action succeeded", ok,
                   "yes" if ok else "no successful rejoin in the window")
         # The log has no "associated" event; the end of the successful rejoin is the nearest
-        # thing, so the 10 s criterion is checked on that.
+        # thing, so the 10 s criterion is checked on that. `ts` is the action's start since T-27.
         done = None
         if ok:
-            done = secs(rejoin, t0)
+            done = secs(rejoin, t0) + rejoin["detail"].get("duration_ms", 0) / 1000
         r.check(f"run {i + 1} rejoin logged after drop", done, 10)
         r.check(f"run {i + 1} connectivity_restored after drop",
                 delay(window, "connectivity_restored", t0), 12)

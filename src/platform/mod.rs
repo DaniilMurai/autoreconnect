@@ -1,6 +1,8 @@
 #[cfg(target_os = "macos")]
 pub mod macos;
 
+use std::sync::Arc;
+
 use crossbeam_channel::Sender;
 
 use crate::core::model::{CredError, LinkEvent, LinkState, NetworkId, ProbeTargets, WifiError};
@@ -54,7 +56,7 @@ pub trait CredentialStore {
 pub struct Platform {
     pub wifi: Box<dyn WifiControl>,
     pub creds: Box<dyn CredentialStore>,
-    pub prober: Box<dyn Prober>,
+    pub prober: Arc<dyn Prober>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

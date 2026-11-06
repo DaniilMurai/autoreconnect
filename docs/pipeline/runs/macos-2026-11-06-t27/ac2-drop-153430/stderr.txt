@@ -1,0 +1,38 @@
+15:34:31.985 credential "Herbst - Mieter": own copy, 8 bytes
+15:34:32.068 probe Dns Ok 41 ms
+15:34:35.164 probe Dns Ok 49 ms
+15:34:38.258 probe Dns Ok 40 ms
+15:34:41.339 probe Dns Ok 34 ms
+15:34:44.418 probe Dns Ok 29 ms
+15:34:49.465 probe Dns Timeout 2001 ms
+15:34:50.999 resolve timed out after 1503 ms
+15:34:52.529 resolve timed out after 1501 ms
+15:34:53.573 probe Gateway Timeout 1008 ms
+15:34:56.209 probe Http Timeout 1500 ms
+15:34:57.266 probe Gateway Timeout 1011 ms
+15:34:59.813 probe Http Timeout 1499 ms
+15:35:00.867 probe Gateway Timeout 1010 ms
+15:35:03.416 probe Http Timeout 1500 ms
+15:35:04.464 probe Gateway Timeout 1002 ms
+15:35:07.018 probe Http Timeout 1500 ms
+15:35:08.067 probe Gateway Timeout 1003 ms
+15:35:10.618 probe Http Timeout 1500 ms
+15:35:11.664 probe Gateway Timeout 1009 ms
+15:35:14.216 probe Http Timeout 1500 ms
+15:35:15.269 probe Gateway Timeout 1009 ms
+15:35:17.824 probe Http Timeout 1500 ms
+15:35:18.873 probe Gateway Timeout 1006 ms
+15:35:21.418 probe Http Timeout 1500 ms
+15:35:22.463 probe Gateway Timeout 1009 ms
+15:35:25.012 probe Http Timeout 1500 ms
+15:35:26.048 probe Gateway Timeout 1000 ms
+15:35:29.399 wifi events [PowerChanged, NetworkChanged, LinkChanged, NetworkChanged, PowerChanged], link Disassociated
+15:35:29.405 wifi events [PowerChanged], link Disassociated
+15:35:29.471 wifi events [PowerChanged], link Disassociated
+15:35:31.347 wifi events [NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -81, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+15:35:31.628 probe Dns Ok 34 ms
+15:35:31.715 wifi events [NetworkChanged, LinkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -77, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+15:35:31.848 probe Dns Ok 109 ms
+15:35:34.951 probe Dns Ok 52 ms
+15:35:38.058 probe Dns Ok 55 ms
+15:35:41.147 probe Dns Ok 31 ms

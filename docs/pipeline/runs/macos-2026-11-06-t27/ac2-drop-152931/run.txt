@@ -1,0 +1,17 @@
+== ac2-drop 2026-11-06 15:29:31  bundle /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t27-resolve-85aa16/target/AutoReconnect.app  logs /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t27-resolve-85aa16/docs/pipeline/runs/macos-2026-11-06-t27/ac2-drop-152931
+app pid 81208 owner daniilmurai: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t27-resolve-85aa16/target/AutoReconnect.app/Contents/MacOS/autoreconnect
+if the block ever gets stuck: sudo pfctl -a com.apple/autoreconnect -F rules
+rule: block drop out quick on en0 all
+blocked 15:30:15
+unblocked 15:30:55
+ONLINE 15:30:55, 0 s after the reference time
+"ts":"2026-11-06T15:30:01.383349+01:00", "event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}
+"ts":"2026-11-06T15:30:23.004856+01:00", "event":"connectivity_lost","detail":{"to":"no_internet"}
+"ts":"2026-11-06T15:30:36.44562+01:00", "event":"recovery_action","detail":{"kind":"reassociate","ok":true,"duration_ms":13440,"error":null}
+"ts":"2026-11-06T15:30:55.549419+01:00", "event":"connectivity_restored","detail":{"downtime_ms":32544}
+AC-2: FAIL
+  ok   connectivity_lost after block: 8.0 s (limit 10 s)
+  FAIL first recovery_action after block: 21.4 s (limit 15 s)
+  ok   connectivity_restored after unblock: 0.5 s (limit 10 s)
+  first action: reassociate
+RESULT: FAIL

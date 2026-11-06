@@ -1,0 +1,8 @@
+event log: /Users/daniilmurai/PycharmProjects/autoreconnect/.claude/worktrees/t27-resolve-85aa16/docs/pipeline/runs/macos-2026-11-06-t27/ac2-return-153854/events.jsonl
+{"ts":"2026-11-06T15:38:55.421015+01:00","health":"unknown","signal":{"rssi_dbm":-84,"noise_dbm":-94,"tx_rate_mbps":16.0},"network":"Herbst - Mieter","event":"app_started","detail":{"version":"0.1.0","os":"macos aarch64"}}
+{"ts":"2026-11-06T15:39:14.913929+01:00","health":"no_internet","signal":{"rssi_dbm":-84,"noise_dbm":-94,"tx_rate_mbps":8.0},"network":"Herbst - Mieter","event":"connectivity_lost","detail":{"to":"no_internet"}}
+{"ts":"2026-11-06T15:39:14.914353+01:00","health":"no_internet","signal":{"rssi_dbm":-84,"noise_dbm":-94,"tx_rate_mbps":8.0},"network":"Herbst - Mieter","event":"recovery_action","detail":{"kind":"reassociate","ok":true,"duration_ms":3503,"error":null}}
+{"ts":"2026-11-06T15:39:48.526966+01:00","health":"no_internet","signal":{"rssi_dbm":-84,"noise_dbm":-94,"tx_rate_mbps":130.0},"network":"Herbst - Mieter","event":"recovery_action","detail":{"kind":"power_cycle","ok":true,"duration_ms":3317,"error":null}}
+{"ts":"2026-11-06T15:40:02.757479+01:00","health":"healthy","signal":{"rssi_dbm":-81,"noise_dbm":-94,"tx_rate_mbps":0.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":47843}}
+{"ts":"2026-11-06T15:40:13.806685+01:00","health":"degraded","signal":{"rssi_dbm":-84,"noise_dbm":-94,"tx_rate_mbps":0.0},"network":"Herbst - Mieter","event":"connection_degraded","detail":{"failed":3,"slow":0,"window":6}}
+{"ts":"2026-11-06T15:40:27.154712+01:00","health":"healthy","signal":{"rssi_dbm":-84,"noise_dbm":-94,"tx_rate_mbps":8.0},"network":"Herbst - Mieter","event":"connectivity_restored","detail":{"downtime_ms":13347}}

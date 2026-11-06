@@ -1,0 +1,79 @@
+15:38:55.430 credential "Herbst - Mieter": own copy, 8 bytes
+15:38:57.474 probe Dns Timeout 2001 ms
+15:38:58.440 probe Http Ok 932 ms
+15:39:00.139 probe Http Ok 644 ms
+15:39:01.247 probe Http Ok 56 ms
+15:39:02.352 probe Http Ok 51 ms
+15:39:03.454 probe Http Ok 54 ms
+15:39:04.575 probe Http Ok 68 ms
+15:39:07.748 probe Dns Ok 131 ms
+15:39:12.798 probe Dns Timeout 2000 ms
+15:39:12.826 probe Http Refused 0 ms
+15:39:13.873 probe Http Refused 0 ms
+15:39:14.912 probe Gateway Timeout 1004 ms
+15:39:18.442 wifi events [NetworkChanged, LinkChanged, NetworkChanged, NetworkChanged, LinkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -79, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+15:39:18.546 probe Dns Refused 0 ms
+15:39:18.569 probe Gateway NotReady 0 ms
+15:39:18.583 wifi events [NetworkChanged, NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -79, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+15:39:18.598 probe Dns NotReady 0 ms
+15:39:19.654 probe Http Refused 0 ms
+15:39:20.672 probe Gateway Timeout 1001 ms
+15:39:21.495 wifi events [NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -84, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:39:23.609 probe Dns Timeout 2001 ms
+15:39:24.663 probe Gateway Timeout 1007 ms
+15:39:24.700 wifi events [LinkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -82, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:39:26.716 probe Dns Timeout 2001 ms
+15:39:27.771 probe Gateway Timeout 1001 ms
+15:39:28.825 probe Http Refused 0 ms
+15:39:29.853 probe Gateway Timeout 1004 ms
+15:39:30.901 probe Http Refused 0 ms
+15:39:31.925 probe Gateway Timeout 1004 ms
+15:39:32.978 probe Http Refused 0 ms
+15:39:34.001 probe Gateway Timeout 1005 ms
+15:39:35.048 probe Http Refused 0 ms
+15:39:36.072 probe Gateway Timeout 1006 ms
+15:39:37.118 probe Http Refused 0 ms
+15:39:38.136 probe Gateway Timeout 1001 ms
+15:39:39.181 probe Http Refused 0 ms
+15:39:40.226 probe Gateway Timeout 1008 ms
+15:39:41.271 probe Http Refused 0 ms
+15:39:42.301 probe Gateway Timeout 1009 ms
+15:39:43.360 probe Http Refused 0 ms
+15:39:44.382 probe Gateway Timeout 1001 ms
+15:39:45.426 probe Http Refused 0 ms
+15:39:46.453 probe Gateway Timeout 1010 ms
+15:39:47.504 probe Http Refused 0 ms
+15:39:48.526 probe Gateway Timeout 1003 ms
+15:39:51.853 wifi events [PowerChanged, NetworkChanged, LinkChanged, NetworkChanged, PowerChanged], link Disassociated
+15:39:51.859 wifi events [PowerChanged], link Disassociated
+15:39:51.930 wifi events [PowerChanged], link Disassociated
+15:39:57.615 wifi events [NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -84, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:39:57.655 probe Dns Refused 0 ms
+15:39:57.675 wifi events [NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -84, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:39:57.708 probe Dns Refused 0 ms
+15:39:57.758 wifi events [LinkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -84, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:39:57.786 probe Dns Refused 0 ms
+15:39:57.801 wifi events [NetworkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -84, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:39:57.826 probe Dns Refused 0 ms
+15:39:58.878 probe Http Refused 0 ms
+15:40:01.442 probe Http Timeout 1501 ms
+15:40:02.536 link poll saw a change: Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -80, noise_dbm: 0, tx_rate_mbps: 0.0 } }
+15:40:02.753 probe Dns Ok 77 ms
+15:40:02.789 wifi events [NetworkChanged, LinkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("b6:42:a1:e8:87:20"), signal: Signal { rssi_dbm: -79, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:40:02.857 probe Dns Ok 53 ms
+15:40:07.908 probe Dns Timeout 2001 ms
+15:40:09.412 probe Http Ok 1471 ms
+15:40:09.440 wifi events [NetworkChanged, LinkChanged], link Associated { network: Some(NetworkId { ssid: "Herbst - Mieter" }), bssid: Some("7e:fe:ce:2c:9e:a1"), signal: Signal { rssi_dbm: -82, noise_dbm: -94, tx_rate_mbps: 0.0 } }
+15:40:09.715 probe Dns Ok 210 ms
+15:40:12.272 resolve timed out after 1503 ms
+15:40:13.806 resolve timed out after 1505 ms
+15:40:15.334 probe Http Timeout 1501 ms
+15:40:16.610 probe Http Ok 1244 ms
+15:40:19.172 probe Http Timeout 1499 ms
+15:40:19.547 probe Http Ok 344 ms
+15:40:21.193 probe Http Ok 596 ms
+15:40:22.432 probe Http Ok 185 ms
+15:40:23.628 probe Http Ok 144 ms
+15:40:25.860 probe Http Ok 1181 ms
+15:40:27.154 probe Http Ok 243 ms
+15:40:30.234 probe Dns Ok 32 ms

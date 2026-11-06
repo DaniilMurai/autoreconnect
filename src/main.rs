@@ -4,6 +4,8 @@ mod platform;
 mod ui;
 
 #[cfg(target_os = "macos")]
+use std::sync::Arc;
+#[cfg(target_os = "macos")]
 use std::thread;
 
 #[cfg(target_os = "macos")]
@@ -59,7 +61,7 @@ fn main() {
             // CoreWLAN objects are not Send, so the platform is built on the thread that uses it.
             let wifi = MacWifi::new().expect("no Wi-Fi interface");
             let prober = prober(&cfg);
-            let platform = Platform { wifi: Box::new(wifi), creds: Box::new(MacCreds), prober: Box::new(prober) };
+            let platform = Platform { wifi: Box::new(wifi), creds: Box::new(MacCreds), prober: Arc::new(prober) };
             let publish = Box::new(move |model| {
                 let _ = models.send_event(TrayEvent::Model(model));
             });
