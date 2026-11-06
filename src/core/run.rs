@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -7,7 +7,7 @@ use crossbeam_channel::{Receiver, never, select};
 use super::events::{Event, EventKind, EventSink};
 use super::model::{CredError, Health, LinkEvent, LinkState, NetworkId, Observation, ProbeKind, RecoveryKind, WifiError};
 use super::policy::{Config, NextAction, Policy, Step};
-use crate::platform::{PermissionState, Platform};
+use crate::platform::{JoinMode, PermissionState, Platform};
 use crate::ui::tray::{UiCommand, UiModel};
 
 pub fn run_core(
@@ -33,6 +33,10 @@ pub fn run_core(
         targets,
         published: None,
         credentials: HashMap::new(),
+        reimport: HashSet::new(),
+        remembered: None,
+        last_network: None,
+        location_reported: false,
         trace: std::env::var_os("AUTORECONNECT_TRACE").is_some(),
         dry_run: std::env::var_os("AUTORECONNECT_DRY_RUN").is_some(),
         commands,
@@ -45,13 +49,15 @@ pub fn run_core(
     let os = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
     core.log(Health::Unknown, EventKind::AppStarted { version: env!("CARGO_PKG_VERSION").into(), os });
     if location == PermissionState::Denied {
-        core.log(Health::Unknown, EventKind::PermissionMissing { which: "location".into() });
+        core.location_missing();
     }
 
     let first = Observation { at: Instant::now(), link: core.link.clone(), probe: None };
     let mut step = core.policy.on_observation(&first);
     loop {
         core.ensure_credential();
+        core.remember();
+        core.update_capabilities();
         core.emit(&mut step);
         step = match step.next {
             NextAction::Act(kind) => core.act(kind),
@@ -93,6 +99,13 @@ struct Core {
     published: Option<Health>,
     /// Networks already looked up this run, and whether a password was found.
     credentials: HashMap<NetworkId, bool>,
+    /// Networks whose own copy the OS refused (-3900): the next lookup imports again instead of reading it.
+    reimport: HashSet<NetworkId>,
+    /// The association `remember_current` last ran for; cleared while not associated.
+    remembered: Option<(Option<NetworkId>, Option<String>)>,
+    /// The network Rejoin goes back to; kept while the link is down.
+    last_network: Option<NetworkId>,
+    location_reported: bool,
     trace: bool,
     dry_run: bool,
     commands: Receiver<UiCommand>,
@@ -165,7 +178,8 @@ impl Core {
             return;
         }
         let network = network.clone();
-        let found = match self.platform.creds.get(&network) {
+        let own = if self.reimport.contains(&network) { Ok(None) } else { self.platform.creds.get(&network) };
+        let found = match own {
             Ok(Some(secret)) => {
                 if self.trace {
                     eprintln!("credential {:?}: own copy, {} bytes", network.ssid, secret.expose().len());
@@ -173,7 +187,11 @@ impl Core {
                 true
             }
             Ok(None) if self.policy.health() == Health::NoInternet => return,
-            Ok(None) => self.import_credential(&network),
+            Ok(None) => {
+                let imported = self.import_credential(&network);
+                self.reimport.remove(&network);
+                imported
+            }
             Err(e) => {
                 self.log(self.policy.health(), EventKind::CredentialMissing { reason: reason(&e) });
                 false
@@ -198,6 +216,40 @@ impl Core {
                 self.log(self.policy.health(), EventKind::CredentialMissing { reason: reason(&e) });
                 false
             }
+        }
+    }
+
+    /// Once per association: a snapshot of the network for `join(FromCache)`, taken while the link is up.
+    fn remember(&mut self) {
+        let LinkState::Associated { network, bssid, .. } = &self.link else {
+            self.remembered = None;
+            return;
+        };
+        let key = (network.clone(), bssid.clone());
+        if self.remembered.as_ref() == Some(&key) {
+            return;
+        }
+        self.remembered = Some(key);
+        match self.platform.wifi.remember_current() {
+            Ok(Some(network)) => self.last_network = Some(network),
+            Ok(None) => {}
+            Err(WifiError::NeedsLocation) => self.location_missing(),
+            Err(e) if self.trace => eprintln!("remember_current: {e:?}"),
+            Err(_) => {}
+        }
+    }
+
+    /// Rejoin/Reassociate only for a known network with a password; a doomed join would just loop.
+    fn update_capabilities(&mut self) {
+        let required = self.platform.creds.required();
+        let allowed = self.last_network.as_ref().is_some_and(|n| !required || self.credentials.get(n) == Some(&true));
+        self.policy.set_capabilities(allowed);
+    }
+
+    fn location_missing(&mut self) {
+        if !self.location_reported {
+            self.location_reported = true;
+            self.log(self.policy.health(), EventKind::PermissionMissing { which: "location".into() });
         }
     }
 
@@ -246,9 +298,9 @@ impl Core {
         let result = match kind {
             _ if self.dry_run => Err(WifiError::Platform { code: 0, message: "dry_run".into() }),
             RecoveryKind::PowerCycle => self.power_cycle(),
-            RecoveryKind::Rejoin | RecoveryKind::Reassociate => {
-                Err(WifiError::Platform { code: 0, message: "not implemented yet".into() })
-            }
+            // From the cache: no scan, 2.3 s instead of 3.6 s back online (T-11).
+            RecoveryKind::Rejoin => self.join(JoinMode::FromCache),
+            RecoveryKind::Reassociate => self.join(JoinMode::FreshScanStrongest),
         };
         let event = EventKind::RecoveryAction {
             kind,
@@ -262,6 +314,31 @@ impl Core {
         self.log(self.policy.health(), event);
         self.publish();
         self.policy.on_action_done(kind, &result, Instant::now())
+    }
+
+    fn join(&mut self, mode: JoinMode) -> Result<(), WifiError> {
+        let Some(network) = self.last_network.clone() else {
+            return Err(WifiError::Platform { code: 0, message: "no network to join".into() });
+        };
+        let password = if self.platform.creds.required() {
+            match self.platform.creds.get(&network) {
+                Ok(Some(secret)) => Some(secret),
+                Ok(None) | Err(_) => {
+                    self.credentials.remove(&network);
+                    return Err(WifiError::Platform { code: 0, message: "no own password copy".into() });
+                }
+            }
+        } else {
+            None
+        };
+        let result = self.platform.wifi.join(&network, mode, password.as_ref());
+        // A stored password the OS refuses is stale (changed on the router): stop using it, import again
+        // once associated. Re-importing during the outage would put an admin prompt into the recovery (AC-6).
+        if password.is_some() && result == Err(WifiError::JoinFailed { code: WRONG_PASSWORD }) {
+            self.credentials.remove(&network);
+            self.reimport.insert(network);
+        }
+        result
     }
 
     fn power_cycle(&self) -> Result<(), WifiError> {
@@ -310,6 +387,9 @@ fn same_link(a: &LinkState, b: &LinkState) -> bool {
     }
 }
 
+/// CoreWLAN's answer to a missing or wrong password (S-01, S-06).
+const WRONG_PASSWORD: i64 = -3900;
+
 fn reason(e: &CredError) -> String {
     match e {
         CredError::UserDenied => "denied".into(),
@@ -334,6 +414,38 @@ mod tests {
         link: Arc<Mutex<LinkState>>,
         events: Arc<Mutex<Option<Sender<LinkEvent>>>>,
         deliver_events: bool,
+        joins: Arc<Mutex<Vec<Join>>>,
+        join_result: Arc<Mutex<Result<(), WifiError>>>,
+    }
+
+    /// Mode and password of one `join` call.
+    type Join = (JoinMode, Option<String>);
+
+    fn associated(ssid: Option<&str>) -> LinkState {
+        LinkState::Associated {
+            network: ssid.map(|s| NetworkId { ssid: s.into() }),
+            bssid: None,
+            signal: Signal { rssi_dbm: -50, noise_dbm: -90, tx_rate_mbps: 400.0 },
+        }
+    }
+
+    impl FakeWifi {
+        fn new(link: LinkState, deliver_events: bool) -> Self {
+            FakeWifi {
+                link: Arc::new(Mutex::new(link)),
+                events: Default::default(),
+                deliver_events,
+                joins: Default::default(),
+                join_result: Arc::new(Mutex::new(Ok(()))),
+            }
+        }
+
+        fn set_link(&self, link: LinkState) {
+            *self.link.lock().unwrap() = link;
+            if let Some(events) = self.events.lock().unwrap().as_ref() {
+                events.send(LinkEvent::LinkChanged).unwrap();
+            }
+        }
     }
 
     impl WifiControl for FakeWifi {
@@ -341,10 +453,19 @@ mod tests {
             Ok(self.link.lock().unwrap().clone())
         }
         fn remember_current(&mut self) -> Result<Option<NetworkId>, WifiError> {
-            Ok(None)
+            match self.link()? {
+                LinkState::Associated { network: None, .. } => Err(WifiError::NeedsLocation),
+                LinkState::Associated { network, .. } => Ok(network),
+                _ => Ok(None),
+            }
         }
-        fn join(&mut self, _: &NetworkId, _: JoinMode, _: Option<&Secret>) -> Result<(), WifiError> {
-            Ok(())
+        fn join(&mut self, network: &NetworkId, mode: JoinMode, password: Option<&Secret>) -> Result<(), WifiError> {
+            self.joins.lock().unwrap().push((mode, password.map(|p| p.expose().to_string())));
+            let result = self.join_result.lock().unwrap().clone();
+            if result.is_ok() {
+                *self.link.lock().unwrap() = associated(Some(&network.ssid));
+            }
+            result
         }
         fn set_power(&self, _: bool) -> Result<(), WifiError> {
             Ok(())
@@ -378,6 +499,30 @@ mod tests {
         }
     }
 
+    /// macOS-like: a password is needed; the System keychain holds "pw".
+    #[derive(Clone, Default)]
+    struct FakeCreds {
+        own: Arc<Mutex<Option<String>>>,
+        imports: Arc<Mutex<u32>>,
+    }
+
+    impl CredentialStore for FakeCreds {
+        fn required(&self) -> bool {
+            true
+        }
+        fn get(&self, _: &NetworkId) -> Result<Option<Secret>, CredError> {
+            Ok(self.own.lock().unwrap().clone().map(Secret::new))
+        }
+        fn import_from_system(&self, _: &NetworkId) -> Result<Secret, CredError> {
+            *self.imports.lock().unwrap() += 1;
+            Ok(Secret::new("pw".into()))
+        }
+        fn put(&self, _: &NetworkId, secret: &Secret) -> Result<(), CredError> {
+            *self.own.lock().unwrap() = Some(secret.expose().to_string());
+            Ok(())
+        }
+    }
+
     struct OkProber;
 
     impl Prober for OkProber {
@@ -404,23 +549,8 @@ mod tests {
 
     /// Runs the core on a healthy link, powers Wi-Fi off and returns how long `wifi_off_by_user` took.
     fn power_off_latency(deliver_events: bool) -> Duration {
-        let associated = LinkState::Associated {
-            network: Some(NetworkId { ssid: "Home".into() }),
-            bssid: None,
-            signal: Signal { rssi_dbm: -50, noise_dbm: -90, tx_rate_mbps: 400.0 },
-        };
-        let wifi = FakeWifi { link: Arc::new(Mutex::new(associated)), events: Default::default(), deliver_events };
-        let sink = MemSink::default();
-        let (commands_tx, commands) = crossbeam_channel::unbounded();
-        let core = {
-            let (wifi, sink) = (wifi.clone(), sink.clone());
-            thread::spawn(move || {
-                let platform = Platform { wifi: Box::new(wifi), creds: Box::new(NoCreds), prober: Box::new(OkProber) };
-                let cfg = Config { healthy_probe_interval: Duration::from_secs(30), ..Config::default() };
-                run_core(platform, cfg, Box::new(sink), PermissionState::Granted, commands, Box::new(|_| {}));
-            })
-        };
-        thread::sleep(Duration::from_millis(300));
+        let wifi = FakeWifi::new(associated(Some("Home")), deliver_events);
+        let (sink, stop) = start(&wifi, Box::new(NoCreds));
         let off_at = Instant::now();
         *wifi.link.lock().unwrap() = LinkState::PoweredOff;
         if let Some(events) = wifi.events.lock().unwrap().as_ref() {
@@ -434,9 +564,129 @@ mod tests {
             assert!(off_at.elapsed() < Duration::from_secs(5), "wifi_off_by_user never logged");
             thread::sleep(Duration::from_millis(5));
         };
-        commands_tx.send(UiCommand::Quit).unwrap();
-        core.join().unwrap();
+        stop();
         logged - off_at
+    }
+
+    fn start(wifi: &FakeWifi, creds: Box<dyn CredentialStore + Send>) -> (MemSink, impl FnOnce()) {
+        let sink = MemSink::default();
+        let (commands_tx, commands) = crossbeam_channel::unbounded();
+        let core = {
+            let (wifi, sink) = (wifi.clone(), sink.clone());
+            thread::spawn(move || {
+                let platform = Platform { wifi: Box::new(wifi), creds, prober: Box::new(OkProber) };
+                let cfg = Config { healthy_probe_interval: Duration::from_secs(30), ..Config::default() };
+                run_core(platform, cfg, Box::new(sink), PermissionState::Granted, commands, Box::new(|_| {}));
+            })
+        };
+        thread::sleep(Duration::from_millis(300));
+        let stop = move || {
+            commands_tx.send(UiCommand::Quit).unwrap();
+            core.join().unwrap();
+        };
+        (sink, stop)
+    }
+
+    fn kinds(sink: &MemSink) -> Vec<EventKind> {
+        sink.0.lock().unwrap().iter().map(|(_, k)| k.clone()).collect()
+    }
+
+    fn wait_for(sink: &MemSink, what: &str, found: impl Fn(&[EventKind]) -> bool) {
+        let since = Instant::now();
+        while !found(&kinds(sink)) {
+            assert!(since.elapsed() < Duration::from_secs(5), "{what} never logged: {:?}", kinds(sink));
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn rejoin_done(ok: bool) -> impl Fn(&[EventKind]) -> bool {
+        move |ks| ks.iter().any(|k| matches!(k, EventKind::RecoveryAction { kind: RecoveryKind::Rejoin, ok: o, .. } if *o == ok))
+    }
+
+    #[test]
+    fn first_seen_network_is_imported_then_rejoined_from_cache() {
+        let wifi = FakeWifi::new(associated(Some("Home")), true);
+        let creds = FakeCreds::default();
+        let (sink, stop) = start(&wifi, Box::new(creds.clone()));
+        wifi.set_link(LinkState::Disassociated);
+        wait_for(&sink, "connectivity_restored", |ks| ks.iter().any(|k| matches!(k, EventKind::ConnectivityRestored { .. })));
+        stop();
+        let ks = kinds(&sink);
+        let imported = ks.iter().position(|k| *k == EventKind::CredentialImported).expect("no credential_imported");
+        let rejoined = ks.iter().position(|k| rejoin_done(true)(std::slice::from_ref(k))).expect("no ok rejoin");
+        assert!(imported < rejoined, "{ks:?}");
+        assert_eq!(*wifi.joins.lock().unwrap(), vec![(JoinMode::FromCache, Some("pw".into()))]);
+        assert_eq!(*creds.imports.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn refused_stored_password_is_imported_again_once_associated() {
+        let wifi = FakeWifi::new(associated(Some("Home")), true);
+        let creds = FakeCreds { own: Arc::new(Mutex::new(Some("old".into()))), ..FakeCreds::default() };
+        let (sink, stop) = start(&wifi, Box::new(creds.clone()));
+        *wifi.join_result.lock().unwrap() = Err(WifiError::JoinFailed { code: WRONG_PASSWORD });
+        wifi.set_link(LinkState::Disassociated);
+        wait_for(&sink, "failed rejoin", rejoin_done(false));
+        // No password left to try: no more joins while the link stays down.
+        thread::sleep(Duration::from_millis(2500));
+        assert_eq!(wifi.joins.lock().unwrap().len(), 1, "joined again with a refused password");
+        assert_eq!(*creds.imports.lock().unwrap(), 0, "imported while disassociated (admin prompt in an outage)");
+        wifi.set_link(associated(Some("Home")));
+        wait_for(&sink, "credential_imported", |ks| ks.contains(&EventKind::CredentialImported));
+        stop();
+        assert_eq!(*creds.imports.lock().unwrap(), 1);
+        assert_eq!(creds.own.lock().unwrap().as_deref(), Some("pw"));
+    }
+
+    #[test]
+    fn missing_location_is_logged_once_and_nothing_joins() {
+        let wifi = FakeWifi::new(associated(None), true);
+        let (sink, stop) = start(&wifi, Box::new(FakeCreds::default()));
+        wifi.set_link(LinkState::Disassociated);
+        thread::sleep(Duration::from_millis(200));
+        wifi.set_link(associated(None));
+        thread::sleep(Duration::from_millis(200));
+        wifi.set_link(LinkState::Disassociated);
+        thread::sleep(Duration::from_millis(1500));
+        stop();
+        let ks = kinds(&sink);
+        let missing = ks.iter().filter(|k| matches!(k, EventKind::PermissionMissing { .. })).count();
+        assert_eq!(missing, 1, "{ks:?}");
+        assert!(wifi.joins.lock().unwrap().is_empty());
+        assert!(!ks.iter().any(|k| matches!(k, EventKind::RecoveryAction { .. })), "{ks:?}");
+    }
+
+    #[test]
+    fn associated_and_lost_reassociates_with_a_fresh_scan() {
+        // Policy picks the action; this checks `run` maps it to the right join.
+        let wifi = FakeWifi::new(associated(Some("Home")), true);
+        let mut core = Core {
+            policy: Policy::new(Config::default()),
+            platform: Platform {
+                wifi: Box::new(wifi.clone()),
+                creds: Box::new(FakeCreds { own: Arc::new(Mutex::new(Some("pw".into()))), ..FakeCreds::default() }),
+                prober: Box::new(OkProber),
+            },
+            cfg: Config::default(),
+            sink: Box::new(MemSink::default()),
+            publish: Box::new(|_| {}),
+            link: associated(Some("Home")),
+            targets: ProbeTargets::default(),
+            published: None,
+            credentials: HashMap::new(),
+            reimport: HashSet::new(),
+            remembered: None,
+            last_network: None,
+            location_reported: false,
+            trace: false,
+            dry_run: false,
+            commands: never(),
+            events: never(),
+        };
+        core.ensure_credential();
+        core.remember();
+        core.act(RecoveryKind::Reassociate);
+        assert_eq!(*wifi.joins.lock().unwrap(), vec![(JoinMode::FreshScanStrongest, Some("pw".into()))]);
     }
 
     #[test]
