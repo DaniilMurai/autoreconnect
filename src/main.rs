@@ -10,9 +10,12 @@ use crate::core::events::JsonlSink;
 use crate::core::policy::Config;
 use crate::core::probe::NetProber;
 use crate::core::run::run_core;
+#[cfg(target_os = "macos")]
 use crate::platform::macos::{MacCreds, MacPermissions, MacWifi};
+#[cfg(target_os = "macos")]
 use crate::platform::{PermissionState, Permissions, Platform};
 
+#[cfg(target_os = "macos")]
 fn main() {
     let cfg = Config::default();
     let _lock = instance::acquire(&cfg.log_dir).unwrap_or_else(|e| {
@@ -49,6 +52,7 @@ fn main() {
     core.join().expect("core thread panicked");
 }
 
+#[cfg(target_os = "macos")]
 /// Asks once, at first launch; an unanswered prompt only delays the start by `PROMPT_WAIT`.
 fn location() -> PermissionState {
     const PROMPT_WAIT: Duration = Duration::from_secs(60);
@@ -60,6 +64,7 @@ fn location() -> PermissionState {
     permissions.wait_for_location(PROMPT_WAIT)
 }
 
+#[cfg(target_os = "macos")]
 fn prober(cfg: &Config) -> NetProber {
     let rest = cfg.http_probe_url.trim_start_matches("http://");
     let (host, path) = match rest.split_once('/') {
@@ -73,4 +78,11 @@ fn prober(cfg: &Config) -> NetProber {
         http_expect_status: cfg.http_expect_status,
         http_expect_body: cfg.http_expect_body.clone(),
     }
+}
+
+// T-20 adds the Windows platform; until then the Windows CI build only has to link.
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("platform not implemented");
+    std::process::exit(1);
 }
