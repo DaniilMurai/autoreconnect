@@ -52,6 +52,10 @@ so there the app must only not get in the way (2026-11-03)._
 7. **Android (after the macOS steps 1–4, before Windows step 5; user 2026-11-06)** — the same idea on an
    Android phone, as far as Android lets a normal app do it. Desk spike S-08 first; scope and AC-13 are
    rewritten from its answer. If S-08 shows a normal app cannot help, the step is dropped and Windows follows.
+   After S-08 (user, 2026-11-06): a sideloaded APK with `targetSdkVersion 28` (legacy `WifiManager` reassociate /
+   disconnect / reconnect / setWifiEnabled), a foreground service with a notification instead of a tray, the Rust
+   core as a `cdylib` via cargo-ndk/JNI under a thin Kotlin shell. Device spike S-08b (D1–D3 on the user's phone)
+   before stage 6. Done = AC-13.
 
 ## Acceptance criteria
 
@@ -161,10 +165,18 @@ AC-14: Given — the app running on associated Wi-Fi with working internet.
        (This proves detection and restraint; whether reassociate helps a really poor
        signal shows only in real-use logs.)
 
-AC-13 (bonus, Android): placeholder until S-08. Shape: on a real Android phone, the app
-       recovers in the AC-4b / AC-2 cases where the phone does not recover on its own, and
-       does no harm in AC-4a; or, if S-08 shows a normal app cannot trigger a
-       rejoin, the step is dropped and the reason goes to `decisions.md`.
+AC-13: Given — the release APK (`targetSdkVersion 28`) sideloaded on a real Android 14+ phone, its foreground
+       service running with the screen on, Wi-Fi online, mobile data on.
+       When — (a) the router blocks the phone's internet while the phone stays associated (AC-2 analogue), 2 min, then
+       unblocked; (b) the router's Wi-Fi is switched off and on as in S-07 (AC-4a analogue); (c) Wi-Fi is turned off in
+       Quick Settings for 2 min (AC-5 analogue). 3 runs each.
+       Then — (a) `connectivity_lost` ≤ 10 s after the block, first `recovery_action` ≤ 15 s, `connectivity_restored`
+       ≤ 10 s after unblocking and the phone's default network is Wi-Fi again ≤ 15 s after unblocking
+       (`adb shell dumpsys connectivity` / `NET_CAPABILITY_VALIDATED`), where without the app it is measured first and
+       the app must be faster; (b) drop → online ≤ the phone's own time without the app + 5 s, no power-cycle during
+       the outage; (c) Wi-Fi still off after 2 min, `wifi_off_by_user` logged, no `recovery_action`. No root, no
+       device-owner, no password typed into the app. The event log is the same JSONL, pulled with `adb`.
+       (From S-08, accepted by the user 2026-11-06.)
 
 ## Non-goals
 

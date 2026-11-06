@@ -2,7 +2,7 @@
 
 - Project: AutoReconnect (working name)
 - Current stage: 7 — implementation (done: T-01…T-13, T-19, T-24, T-25, T-26; code merged, checks left: T-16 AC-7/AC-8, T-22 dry read + Windows half)
-- Next: T-14 macOS AC runs (user runs sudo/pf; ready now), then T-15 router, T-16 AC-7/AC-8, T-17, T-18; then Android: S-08 spike → tasks; Windows T-20/T-21 after Android
+- Next: T-14 macOS AC runs (user runs sudo/pf; ready now), then T-15 router, T-16 AC-7/AC-8, T-17, T-18; then Android: S-08b device spike (needs the user's phone + adb) → stage 6 tasks; Windows T-20/T-21 after Android
 - Mode: orchestrated (since 2026-11-03; see the pipeline skill's references/orchestration.md)
 - Scope for now (user, 2026-11-03): only tasks that need nothing from the user — no sudo, no live
   network-breaking runs, no prompts, no hardware or other people. Today that is T-05 → T-06 (both
@@ -84,3 +84,4 @@
 - 2026-11-06 (user): platform order = macOS → Android → Windows (no Windows machine to test on now). Android needs S-08 (desk spike) and then tasks from stage 6; T-20/T-21 wait until Android is done or dropped. plan.md, brief.md, tasks.md updated.
 - 2026-11-06 (user, in the T-14 session): AC-3 (30-min block) dropped from T-14; the script is removed, the runs file marks it "dropped by the user". plan.md AC-3 stays as written until stage 9.
 - 2026-11-06 (S-08): Android viable only as a sideloaded APK with targetSdk 28 (legacy WifiManager reassociate/disconnect/reconnect/setWifiEnabled still allowed on Android 10–17 per AOSP); Play (target ≥ 35) = detect-only → dropped. Android itself does not recover a Wi-Fi without internet (switches to mobile data). Device checks D1–D7 need a phone + adb (none on this Mac). Scope decision with the user pending.
+- 2026-11-06 (user, after S-08): Android = sideloaded targetSdk-28 APK, foreground service; Kotlin shell + Rust core (`cdylib`, cargo-ndk/JNI). plan.md step 7 and AC-13 rewritten from S-08. Next for Android: device spike S-08b (D1–D3) on the user's phone with adb, then stage 6 tasks from the S-08 list.
