@@ -187,7 +187,7 @@ run by the user in their own terminal (brief.md, "How to run")._
       Executor: main loop
       Depends on: T-12
 
-- [ ] T-14 — macOS AC runs: detection and recovery
+- [x] T-14 — macOS AC runs: detection and recovery
       Files: docs/pipeline/runs/macos-<date>.md (new; logs next to it)
       Do: first move T-13's live scripts (`disassociate.swift`, `common.sh`, `prep.sh`, `ac4b.sh`, `ac2.sh`
           from T-13's scratchpad, see reports/T-13.md) into `tools/live/`; user runs the pf blocks; record AC-2 (`drop` and `return`), AC-3 (30 min), AC-4b (3 runs), AC-5,
@@ -203,7 +203,27 @@ run by the user in their own terminal (brief.md, "How to run")._
       DoD: each drop → online ≤ 123 s, zero `power_cycle` during the outage, `connectivity_lost` and
            `connectivity_restored` per run.
       Executor: main loop (user switches the router)
+      Depends on: T-27
+
+- [ ] T-27 — HTTP target resolution never blocks the core loop
+      Files: src/core/run.rs, src/core/probe*.rs as needed
+      Do: from T-14 (AC-2 FAIL ×2: no events at all under a full egress block). `probe()` calls `resolve_http()`
+          (blocking `getaddrinfo`, no timeout) on the core thread; resolve on a worker with a deadline
+          ≤ `http_timeout`, keep the last good address, count a resolve timeout as a probe failure; add
+          timestamps to trace lines.
+      DoD: run.rs test with a `resolve_http` that blocks 60 s → `connectivity_lost` ≤ 10 s; all tests pass;
+           live `tools/live/ac2.sh drop` and `ac2.sh return` PASS by `check_log.py ac2` (user runs them).
+      Executor: main loop (user runs sudo)
       Depends on: T-14
+
+- [ ] T-28 — Re-tune the Degraded rule for AC-14
+      Files: src/core/policy.rs, docs/pipeline/contracts.md (thresholds)
+      Do: from T-14 (AC-14 FAIL: degraded at 53.6 s > 30 s; health flapped Degraded → restored twice while 40 % loss
+          was on). Change the window/threshold and require a longer clean run before leaving Degraded.
+      DoD: a policy test replaying T-14's AC-14 probe sequence (runs/macos-2026-11-06/ac14-130152) reaches
+           Degraded ≤ 30 s and does not restore while the loss is on; live `tools/live/ac14.sh` PASS.
+      Executor: main loop (user runs sudo)
+      Depends on: T-27
 
 ## Tray and login (macOS)
 
@@ -214,11 +234,11 @@ run by the user in their own terminal (brief.md, "How to run")._
           when the sink fails, Quit; icon changes per Health. Move T-09's Location-prompt wait (now an `NSRunLoop`
           poll, up to 60 s, in `main`) into the event loop and pass a later answer to the core.
       State (2026-11-06): code merged; user checked icon, menu reopening and the 5-line list; AC-1 footprint 21 MB.
-           Left: AC-7, AC-8 live runs after T-14.
+           Left: AC-7, AC-8 live runs after T-27 (AC-7's resume half needs AC-2 to pass).
       DoD: AC-7 (pause → no `recovery_action` under a 2-min block, tray shows paused; resume → AC-2 passes);
            AC-8 (5 menu lines match the last 5 `recovery_action` lines); icon checked by eye; AC-1 still < 60 MB physical footprint.
       Executor: main loop
-      Depends on: T-14
+      Depends on: T-14, T-27
 
 - [ ] T-17 — Start at login
       Files: src/platform/macos.rs (LoginItem), src/ui/tray.rs
