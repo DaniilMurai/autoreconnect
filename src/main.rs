@@ -10,9 +10,9 @@ use std::thread;
 
 #[cfg(target_os = "macos")]
 use crate::core::events::{EventSink, JsonlSink};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use crate::core::policy::Config;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use crate::core::probe::NetProber;
 #[cfg(target_os = "macos")]
 use crate::core::run::run_core;
@@ -86,7 +86,7 @@ fn location() -> PermissionState {
     permissions.wait_for_location(PROMPT_WAIT)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn prober(cfg: &Config) -> NetProber {
     let rest = cfg.http_probe_url.trim_start_matches("http://");
     let (host, path) = match rest.split_once('/') {
@@ -102,8 +102,34 @@ fn prober(cfg: &Config) -> NetProber {
     }
 }
 
-// T-20 adds the Windows platform; until then the Windows CI build only has to link.
-#[cfg(not(target_os = "macos"))]
+/// Headless until T-21 brings the tray: the core runs and logs, Ctrl+C stops it.
+#[cfg(windows)]
+fn main() {
+    use crate::core::events::{EventSink, JsonlSink};
+    use crate::core::run::run_core;
+    use crate::platform::windows::{WinCreds, WinWifi};
+    use crate::platform::{PermissionState, Platform};
+    use std::sync::Arc;
+
+    let cfg = Config::default();
+    let _lock = instance::acquire(&cfg.log_dir).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        std::process::exit(1);
+    });
+    let sink = JsonlSink::open(&cfg.log_dir, cfg.log_max_bytes).expect("cannot open the event log");
+    println!("event log: {}", sink.path().display());
+    let wifi = WinWifi::new().unwrap_or_else(|e| {
+        eprintln!("no Wi-Fi interface: {e:?}");
+        std::process::exit(1);
+    });
+    let platform = Platform { wifi: Box::new(wifi), creds: Box::new(WinCreds), prober: Arc::new(prober(&cfg)) };
+    let (_commands_tx, commands) = crossbeam_channel::unbounded();
+    let sink: Box<dyn EventSink> = Box::new(sink);
+    // WinWifi holds a WLAN handle and is not Send, so it stays on this thread.
+    run_core(platform, cfg, sink, PermissionState::NotApplicable, commands, Box::new(|_| {}));
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn main() {
     eprintln!("platform not implemented");
     std::process::exit(1);

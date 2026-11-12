@@ -55,6 +55,7 @@ dependencies = [
  "tao",
  "time",
  "tray-icon",
+ "windows",
 ]
 
 [[package]]

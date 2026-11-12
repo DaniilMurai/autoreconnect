@@ -1,5 +1,7 @@
 #[cfg(target_os = "macos")]
 pub mod macos;
+#[cfg(windows)]
+pub mod windows;
 
 use std::sync::Arc;
 
@@ -50,6 +52,13 @@ pub trait CredentialStore {
     /// Reads the OS copy. macOS: System keychain, one admin prompt (S-06). Only at first sight of a network.
     fn import_from_system(&self, network: &NetworkId) -> Result<Secret, CredError>;
     fn put(&self, network: &NetworkId, secret: &Secret) -> Result<(), CredError>;
+}
+
+/// Start at login; the platform decides how (macOS login item, Windows HKCU Run key).
+#[allow(dead_code)]
+pub trait LoginItem {
+    fn enabled(&self) -> Result<bool, WifiError>;
+    fn set_enabled(&self, on: bool) -> Result<(), WifiError>;
 }
 
 /// Grows a `login` field in T-17.

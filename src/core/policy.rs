@@ -39,13 +39,30 @@ pub struct Config {
     pub utc_offset: time::UtcOffset,
 }
 
+#[cfg(windows)]
+const HTTP_PROBE_URL: &str = "http://www.msftconnecttest.com/connecttest.txt";
+#[cfg(windows)]
+const HTTP_PROBE_BODY: &str = "Microsoft Connect Test";
+#[cfg(not(windows))]
+const HTTP_PROBE_URL: &str = "http://captive.apple.com/hotspot-detect.html";
+#[cfg(not(windows))]
+const HTTP_PROBE_BODY: &str = "Success";
+
+#[cfg(windows)]
+fn default_log_dir() -> PathBuf {
+    std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_default().join("AutoReconnect")
+}
+
+#[cfg(not(windows))]
+fn default_log_dir() -> PathBuf {
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    home.join("Library/Application Support/AutoReconnect")
+}
+
 impl Default for Config {
     fn default() -> Self {
         let s = Duration::from_secs;
-        let log_dir = std::env::var_os("AUTORECONNECT_LOG_DIR").map(PathBuf::from).unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-            home.join("Library/Application Support/AutoReconnect")
-        });
+        let log_dir = std::env::var_os("AUTORECONNECT_LOG_DIR").map(PathBuf::from).unwrap_or_else(default_log_dir);
         Self {
             healthy_probe_interval: s(3),
             http_every_n: 10,
@@ -73,9 +90,9 @@ impl Default for Config {
             own_power_cycle_window: s(15),
             power_cycle_off_time: s(3),
             dns_probe_zone: "google.com".into(),
-            http_probe_url: "http://captive.apple.com/hotspot-detect.html".into(),
+            http_probe_url: HTTP_PROBE_URL.into(),
             http_expect_status: 200,
-            http_expect_body: "Success".into(),
+            http_expect_body: HTTP_PROBE_BODY.into(),
             log_dir,
             log_max_bytes: 5_000_000,
             utc_offset: time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC),

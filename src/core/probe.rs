@@ -125,6 +125,30 @@ impl NetProber {
 
 /// ICMP echo and a CHAOS `version.bind` query, sent together; any reply from the gateway = ok.
 /// Some routers drop ping (S-09); the CHAOS query is answered by the router itself, never forwarded.
+#[cfg(windows)]
+fn gateway(gw: Ipv4Addr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
+    use crate::platform::windows::{icmp_echo, interface_ipv4};
+    let deadline = Instant::now() + timeout;
+    // Datagram ICMP sockets do not exist on Windows; IcmpSendEcho blocks, so the CHAOS query goes out first.
+    let chaos = send_chaos(gw, iface);
+    let source = iface.and_then(interface_ipv4);
+    match icmp_echo(gw, source, timeout) {
+        Ok(true) => return ProbeOutcome::Ok,
+        Ok(false) => {}
+        Err(e) if chaos.is_err() => return io_outcome(&e),
+        Err(_) => {}
+    }
+    let mut buf = [0u8; 1500];
+    while Instant::now() < deadline {
+        if chaos.as_ref().is_ok_and(|(s, id)| matches!(s.recv(&mut buf), Ok(n) if n >= 12 && buf[0..2] == *id)) {
+            return ProbeOutcome::Ok;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    ProbeOutcome::Timeout
+}
+
+#[cfg(not(windows))]
 fn gateway(gw: Ipv4Addr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeOutcome {
     let deadline = Instant::now() + timeout;
     let echo = send_echo(gw, iface);
@@ -145,6 +169,7 @@ fn gateway(gw: Ipv4Addr, iface: Option<NonZeroU32>, timeout: Duration) -> ProbeO
     ProbeOutcome::Timeout
 }
 
+#[cfg(not(windows))]
 /// ICMP echo over a datagram socket, which macOS allows without root (verified 2026-11-03).
 fn send_echo(gw: Ipv4Addr, iface: Option<NonZeroU32>) -> std::io::Result<(UdpSocket, [u8; 2])> {
     let sock: UdpSocket = bound_socket(&IpAddr::V4(gw), Type::DGRAM, Protocol::ICMPV4, iface)?.into();
@@ -159,6 +184,7 @@ fn send_echo(gw: Ipv4Addr, iface: Option<NonZeroU32>) -> std::io::Result<(UdpSoc
     Ok((sock, seq))
 }
 
+#[cfg(not(windows))]
 fn echo_reply(sock: &UdpSocket, gw: Ipv4Addr, seq: [u8; 2], buf: &mut [u8]) -> bool {
     let Ok((n, from)) = sock.recv_from(buf) else { return false };
     // macOS hands datagram ICMP replies over with the IP header in front.
@@ -178,17 +204,20 @@ fn send_chaos(gw: Ipv4Addr, iface: Option<NonZeroU32>) -> std::io::Result<(UdpSo
 /// A socket bound to `iface` (`IP_BOUND_IF` on macOS), so it leaves through Wi-Fi whatever the routing table says.
 fn bound_socket(peer: &IpAddr, ty: Type, proto: Protocol, iface: Option<NonZeroU32>) -> std::io::Result<Socket> {
     let sock = Socket::new(Domain::for_address(SocketAddr::new(*peer, 0)), ty, Some(proto))?;
-    // socket2 has no interface binding on Windows; T-20 picks the mechanism (IP_UNICAST_IF or a source address).
+    // socket2 has no interface binding on Windows; IP_UNICAST_IF is set in platform::windows.
     #[cfg(target_os = "macos")]
     match peer {
         IpAddr::V4(_) => sock.bind_device_by_index_v4(iface)?,
         IpAddr::V6(_) => sock.bind_device_by_index_v6(iface)?,
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    crate::platform::windows::bind_to_interface(&sock, iface)?;
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = iface;
     Ok(sock)
 }
 
+#[cfg(not(windows))]
 fn checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = data.chunks(2).map(|c| u32::from(u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)]))).sum();
     while sum >> 16 != 0 {
